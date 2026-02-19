@@ -41,7 +41,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [x] Add explicit stale-data warnings (e.g. last successful sync threshold)
 - [x] Add retry/trigger actions per resource (brands/categories/products/etc.)
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
-- [ ] Add integration tests for admin filtering and pagination behavior
+- [x] Add integration tests for admin filtering and pagination behavior
 - [ ] Add performance guardrails (indexes review, query optimization checks)
 - [ ] Optional: notification/alerting for repeated sync failures
 
@@ -216,3 +216,19 @@ Use this format for each session:
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
 - Add integration tests for admin filtering and pagination behavior.
+
+### Session 2026-02-19 (Phase 2 - Filter/Pagination Integration Tests)
+- Goal: Add integration-level coverage for admin list filtering and pagination behaviors.
+- Changes made:
+- Added admin feature tests covering:
+- Brands search filter and pagination.
+- Products filtering by search + brand + subcategory.
+- Inventory low-stock filter behavior.
+- Orders search filter and pagination.
+- Files touched:
+- `tests/Feature/Admin/AdminFilteringPaginationTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminFilteringPaginationTest.php tests/Feature/Admin`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Evaluate performance guardrails (indexes/query checks).
