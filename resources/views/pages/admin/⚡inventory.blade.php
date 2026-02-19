@@ -51,9 +51,17 @@ new class extends Component {
 <section class="w-full">
     <x-pages::admin.layout :heading="__('Inventory')" :subheading="__('Monitor variant stock levels synced from the main store')">
         <div class="space-y-4">
-            <div class="grid gap-3 md:grid-cols-2">
+            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                 <flux:input wire:model.live.debounce.300ms="search" :label="__('Search SKU / Product')" placeholder="{{ __('Type SKU, code, or product name...') }}" />
-                <flux:checkbox wire:model.live="onlyLowStock" :label="__('Only low stock (<= 5 available)')" />
+
+                <flux:field variant="inline" class="rounded-lg border border-zinc-200 px-3 py-2 md:justify-self-end dark:border-zinc-700">
+                    <div class="space-y-1">
+                        <flux:label>{{ __('Only Low Stock') }}</flux:label>
+                        <flux:description>{{ __('Show variants with 5 or fewer units available') }}</flux:description>
+                    </div>
+
+                    <flux:switch wire:model.live="onlyLowStock" align="end" />
+                </flux:field>
             </div>
 
             <flux:table :paginate="$this->variants">

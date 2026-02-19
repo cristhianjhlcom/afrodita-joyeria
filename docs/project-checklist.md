@@ -232,3 +232,14 @@ Use this format for each session:
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
 - Evaluate performance guardrails (indexes/query checks).
+
+### Session 2026-02-19 (UI Polish - Inventory Filter Control)
+- Goal: Improve the UX of the low-stock filter input in inventory module.
+- Changes made:
+- Replaced raw checkbox control with inline `flux:field` + `flux:switch`.
+- Improved responsive alignment and control readability.
+- Files touched:
+- `resources/views/pages/admin/⚡inventory.blade.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminFilteringPaginationTest.php`
+- Result: Passing.
