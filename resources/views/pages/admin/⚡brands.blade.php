@@ -36,6 +36,8 @@ new class extends Component {
 
     public function toggleWhitelist(int $brandId): void
     {
+        abort_unless(auth()->user()?->can('toggleWhitelist', Brand::class), 403);
+
         $brand = Brand::query()->findOrFail($brandId);
 
         $whitelist = BrandWhitelist::query()->firstOrCreate([

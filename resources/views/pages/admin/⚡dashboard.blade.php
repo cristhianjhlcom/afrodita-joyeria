@@ -192,6 +192,8 @@ new class extends Component {
 
     public function queueSync(): void
     {
+        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
+
         Artisan::call('main-store:sync', [
             'resource' => 'all',
             '--queued' => true,
@@ -203,6 +205,8 @@ new class extends Component {
 
     public function queueResourceSync(string $resource): void
     {
+        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
+
         if (! in_array($resource, $this->supportedSyncCommands(), true)) {
             return;
         }

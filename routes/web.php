@@ -1,5 +1,11 @@
 <?php
 
+use App\Models\Brand;
+use App\Models\Category;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\SyncRun;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'home')->name('home');
@@ -10,14 +16,30 @@ Route::middleware(['auth', 'verified', 'admin'])
     ->group(function (): void {
         Route::redirect('/', '/admin/dashboard');
 
-        Route::livewire('dashboard', 'pages::admin.dashboard')->name('dashboard');
-        Route::livewire('brands', 'pages::admin.brands')->name('brands');
-        Route::livewire('categories', 'pages::admin.categories')->name('categories');
-        Route::livewire('products', 'pages::admin.products')->name('products');
-        Route::livewire('products/{product}', 'pages::admin.product-detail')->name('products.show');
-        Route::livewire('inventory', 'pages::admin.inventory')->name('inventory');
-        Route::livewire('orders', 'pages::admin.orders')->name('orders');
-        Route::livewire('sync-runs/{syncRun}', 'pages::admin.sync-run-detail')->name('sync-runs.show');
+        Route::livewire('dashboard', 'pages::admin.dashboard')
+            ->can('viewAny', SyncRun::class)
+            ->name('dashboard');
+        Route::livewire('brands', 'pages::admin.brands')
+            ->can('viewAny', Brand::class)
+            ->name('brands');
+        Route::livewire('categories', 'pages::admin.categories')
+            ->can('viewAny', Category::class)
+            ->name('categories');
+        Route::livewire('products', 'pages::admin.products')
+            ->can('viewAny', Product::class)
+            ->name('products');
+        Route::livewire('products/{product}', 'pages::admin.product-detail')
+            ->can('view', 'product')
+            ->name('products.show');
+        Route::livewire('inventory', 'pages::admin.inventory')
+            ->can('viewAny', ProductVariant::class)
+            ->name('inventory');
+        Route::livewire('orders', 'pages::admin.orders')
+            ->can('viewAny', Order::class)
+            ->name('orders');
+        Route::livewire('sync-runs/{syncRun}', 'pages::admin.sync-run-detail')
+            ->can('view', 'syncRun')
+            ->name('sync-runs.show');
     });
 
 require __DIR__.'/settings.php';

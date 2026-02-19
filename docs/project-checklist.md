@@ -40,7 +40,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [x] Add sync run detail page and error inspection UI
 - [x] Add explicit stale-data warnings (e.g. last successful sync threshold)
 - [x] Add retry/trigger actions per resource (brands/categories/products/etc.)
-- [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
+- [x] Add policies/gates for finer permissions (if needed beyond admin/customer)
 - [x] Add integration tests for admin filtering and pagination behavior
 - [x] Add performance guardrails (indexes review, query optimization checks)
 - [x] Optional: notification/alerting for repeated sync failures
@@ -288,3 +288,34 @@ Use this format for each session:
 - Result: Passing.
 - Next action:
 - Decide whether to introduce finer-grained policies beyond admin/customer role checks.
+
+### Session 2026-02-19 (Phase 2 - Policy/Gate Refinement)
+- Goal: Introduce finer-grained authorization controls beyond plain admin middleware.
+- Changes made:
+- Added model policies for admin resources:
+- `BrandPolicy`, `CategoryPolicy`, `ProductPolicy`, `ProductVariantPolicy`, `OrderPolicy`, `SyncRunPolicy`.
+- Added explicit policy abilities for sensitive actions:
+- `toggleWhitelist` on brands.
+- `trigger` on sync runs.
+- Added route-level policy middleware via `->can(...)` for all admin module routes.
+- Added action-level Livewire authorization guards for:
+- Brand whitelist toggles.
+- Full/resource sync queue actions.
+- Added tests for policy ability matrix and Livewire action authorization hardening.
+- Files touched:
+- `app/Policies/BrandPolicy.php`
+- `app/Policies/CategoryPolicy.php`
+- `app/Policies/ProductPolicy.php`
+- `app/Policies/ProductVariantPolicy.php`
+- `app/Policies/OrderPolicy.php`
+- `app/Policies/SyncRunPolicy.php`
+- `routes/web.php`
+- `resources/views/pages/admin/⚡brands.blade.php`
+- `resources/views/pages/admin/⚡dashboard.blade.php`
+- `tests/Feature/Admin/AdminPolicyAuthorizationTest.php`
+- `tests/Feature/Admin/AdminLivewireActionAuthorizationTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminPolicyAuthorizationTest.php tests/Feature/Admin/AdminLivewireActionAuthorizationTest.php tests/Feature/Admin tests/Feature/Console/SyncMainStoreCommandTest.php`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Phase 2 completion review and backlog prioritization.
