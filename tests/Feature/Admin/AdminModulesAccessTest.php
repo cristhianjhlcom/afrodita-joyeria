@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -23,6 +24,18 @@ it('allows admins to access admin modules', function (string $routeName) {
     'admin orders' => 'admin.orders',
 ]);
 
+it('allows admins to access product detail module', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::Admin,
+    ]);
+
+    $product = Product::factory()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.products.show', $product))
+        ->assertSuccessful();
+});
+
 it('forbids customers from admin modules', function (string $routeName) {
     $customer = User::factory()->create([
         'role' => UserRole::Customer,
@@ -39,3 +52,15 @@ it('forbids customers from admin modules', function (string $routeName) {
     'admin.inventory',
     'admin.orders',
 ]);
+
+it('forbids customers from product detail module', function () {
+    $customer = User::factory()->create([
+        'role' => UserRole::Customer,
+    ]);
+
+    $product = Product::factory()->create();
+
+    $this->actingAs($customer)
+        ->get(route('admin.products.show', $product))
+        ->assertForbidden();
+});

@@ -96,6 +96,7 @@ new class extends Component {
                     <flux:table.column>{{ __('Status') }}</flux:table.column>
                     <flux:table.column>{{ __('Variants') }}</flux:table.column>
                     <flux:table.column>{{ __('Main Store ID') }}</flux:table.column>
+                    <flux:table.column align="end">{{ __('Action') }}</flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
@@ -107,10 +108,15 @@ new class extends Component {
                             <flux:table.cell>{{ str($product->status)->headline() }}</flux:table.cell>
                             <flux:table.cell>{{ number_format($product->variants_count) }}</flux:table.cell>
                             <flux:table.cell>{{ $product->external_id ?? '-' }}</flux:table.cell>
+                            <flux:table.cell align="end">
+                                <flux:button size="sm" variant="ghost" :href="route('admin.products.show', $product)" wire:navigate>
+                                    {{ __('View') }}
+                                </flux:button>
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6">{{ __('No products found.') }}</flux:table.cell>
+                            <flux:table.cell colspan="7">{{ __('No products found.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>

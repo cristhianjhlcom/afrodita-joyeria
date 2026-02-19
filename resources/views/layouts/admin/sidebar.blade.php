@@ -24,7 +24,7 @@
                     <flux:sidebar.item icon="squares-2x2" :href="route('admin.categories')" :current="request()->routeIs('admin.categories')" wire:navigate>
                         {{ __('Categories') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="cube" :href="route('admin.products')" :current="request()->routeIs('admin.products')" wire:navigate>
+                    <flux:sidebar.item icon="cube" :href="route('admin.products')" :current="request()->routeIs('admin.products*')" wire:navigate>
                         {{ __('Products') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>

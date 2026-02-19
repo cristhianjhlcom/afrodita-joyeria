@@ -20,6 +20,7 @@ Route::middleware(['auth', 'verified', 'admin'])
         Route::livewire('brands', 'pages::admin.brands')->name('brands');
         Route::livewire('categories', 'pages::admin.categories')->name('categories');
         Route::livewire('products', 'pages::admin.products')->name('products');
+        Route::livewire('products/{product}', 'pages::admin.product-detail')->name('products.show');
         Route::livewire('inventory', 'pages::admin.inventory')->name('inventory');
         Route::livewire('orders', 'pages::admin.orders')->name('orders');
     });
