@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'main_store' => [
+        'base_url' => env('MAIN_STORE_BASE_URL', ''),
+        'token' => env('MAIN_STORE_TOKEN', ''),
+        'timeout' => env('MAIN_STORE_TIMEOUT', 10),
+    ],
+
 ];
