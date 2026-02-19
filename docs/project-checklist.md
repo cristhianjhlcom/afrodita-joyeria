@@ -43,7 +43,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
 - [x] Add integration tests for admin filtering and pagination behavior
 - [x] Add performance guardrails (indexes review, query optimization checks)
-- [ ] Optional: notification/alerting for repeated sync failures
+- [x] Optional: notification/alerting for repeated sync failures
 
 ## Environment / Ops Checklist
 - [ ] `.env` configured for MySQL
@@ -266,3 +266,25 @@ Use this format for each session:
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
 - Optional repeated sync failure alerting.
+
+### Session 2026-02-19 (Phase 2 - Repeated Failure Alerts)
+- Goal: Add alerting for repeated sync failures to support ops visibility.
+- Changes made:
+- Added configurable failure threshold:
+- `services.main_store.failure_alert_threshold`
+- `MAIN_STORE_FAILURE_ALERT_THRESHOLD`
+- Added dashboard repeated-failure detection by resource:
+- Counts consecutive failed runs from newest run backward.
+- Displays danger callout when threshold is reached/exceeded.
+- Added feature tests for alert shown/not shown scenarios.
+- Files touched:
+- `.env.example`
+- `config/services.php`
+- `resources/views/pages/admin/⚡dashboard.blade.php`
+- `tests/Feature/Admin/AdminDashboardFailureAlertsTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminDashboardFailureAlertsTest.php tests/Feature/Admin/AdminDashboardSyncHealthTest.php tests/Feature/Admin/AdminDashboardResourceSyncActionsTest.php`
+- `php artisan test --compact tests/Feature/Admin`
+- Result: Passing.
+- Next action:
+- Decide whether to introduce finer-grained policies beyond admin/customer role checks.

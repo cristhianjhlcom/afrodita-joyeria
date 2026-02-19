@@ -40,6 +40,7 @@ return [
         'token' => env('MAIN_STORE_TOKEN', ''),
         'timeout' => env('MAIN_STORE_TIMEOUT', 10),
         'stale_threshold_minutes' => env('MAIN_STORE_STALE_THRESHOLD_MINUTES', 60),
+        'failure_alert_threshold' => env('MAIN_STORE_FAILURE_ALERT_THRESHOLD', 3),
     ],
 
 ];

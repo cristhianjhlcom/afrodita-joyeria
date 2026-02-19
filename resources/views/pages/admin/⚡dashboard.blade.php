@@ -150,6 +150,46 @@ new class extends Component {
         ];
     }
 
+    #[Computed]
+    public function failureAlerts(): array
+    {
+        $resourceRuns = SyncRun::query()
+            ->whereIn('resource', collect($this->supportedSyncResources())->pluck('run_resource')->all())
+            ->latest('started_at')
+            ->get()
+            ->groupBy('resource');
+
+        $threshold = max(1, (int) config('services.main_store.failure_alert_threshold', 3));
+
+        $alerts = [];
+
+        foreach ($resourceRuns as $resource => $runs) {
+            $consecutiveFailures = 0;
+
+            foreach ($runs as $run) {
+                if ($run->status !== 'failed') {
+                    break;
+                }
+
+                $consecutiveFailures++;
+            }
+
+            if ($consecutiveFailures >= $threshold) {
+                $alerts[] = [
+                    'resource' => $resource,
+                    'resource_label' => str($resource)->replace('-', ' ')->headline()->value(),
+                    'failures' => $consecutiveFailures,
+                ];
+            }
+        }
+
+        return [
+            'threshold' => $threshold,
+            'alerts' => $alerts,
+            'has_alerts' => $alerts !== [],
+        ];
+    }
+
     public function queueSync(): void
     {
         Artisan::call('main-store:sync', [
@@ -182,6 +222,19 @@ new class extends Component {
 <section class="w-full">
     <x-pages::admin.layout :heading="__('Admin Dashboard')" :subheading="__('Monitor sync health and catalog coverage')">
         <div class="space-y-4">
+            @if ($this->failureAlerts['has_alerts'])
+                <flux:callout icon="x-circle" variant="danger" heading="{{ __('Repeated sync failures detected') }}">
+                    <div class="space-y-1 text-sm">
+                        <p>
+                            {{ __('One or more resources have reached the failure threshold (:threshold consecutive failures).', ['threshold' => $this->failureAlerts['threshold']]) }}
+                        </p>
+                        <p>
+                            {{ collect($this->failureAlerts['alerts'])->map(fn (array $alert): string => $alert['resource_label'].' ('.$alert['failures'].')')->join(', ') }}
+                        </p>
+                    </div>
+                </flux:callout>
+            @endif
+
             @if ($this->syncHealth['is_stale'])
                 <flux:callout icon="exclamation-triangle" variant="warning" heading="{{ __('Sync data is stale') }}">
                     <div class="space-y-1 text-sm">
