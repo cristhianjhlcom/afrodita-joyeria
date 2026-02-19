@@ -42,7 +42,7 @@
             <flux:spacer />
 
             <flux:sidebar.nav>
-                <flux:sidebar.item icon="arrow-left" :href="route('dashboard')" wire:navigate>
+                <flux:sidebar.item icon="arrow-left" :href="route('home')" wire:navigate>
                     {{ __('Back to App') }}
                 </flux:sidebar.item>
             </flux:sidebar.nav>
@@ -84,7 +84,7 @@
                         <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>
                             {{ __('Settings') }}
                         </flux:menu.item>
-                        <flux:menu.item :href="route('dashboard')" icon="arrow-left" wire:navigate>
+                        <flux:menu.item :href="route('home')" icon="arrow-left" wire:navigate>
                             {{ __('Back to App') }}
                         </flux:menu.item>
                     </flux:menu.radio.group>

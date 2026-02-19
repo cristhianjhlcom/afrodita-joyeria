@@ -130,3 +130,31 @@ Use this format for each session:
 - Result: Passing.
 - Next action:
 - Run `php artisan db:seed --class=Database\\\\Seeders\\\\DevelopmentTestingSeeder` in local for API-less UI/flow testing.
+
+### Session 2026-02-19 (Routing + Local Bootstrap)
+- Goal: Make local bootstrap smoother and align routing with admin-first flow.
+- Changes made:
+- Removed `/dashboard` route and standardized app home to `/`.
+- Added simple public homepage placeholder for upcoming storefront routes.
+- Removed legacy `welcome` view.
+- Updated Fortify post-auth redirect home path to `/`.
+- Updated UI links that still pointed to removed dashboard route.
+- Added local-only hook to auto-run `DevelopmentTestingSeeder` after `php artisan migrate:fresh` when `--seed` is not provided.
+- Updated auth/home tests to reflect new route behavior.
+- Files touched:
+- `routes/web.php`
+- `resources/views/home.blade.php`
+- `resources/views/welcome.blade.php` (deleted)
+- `config/fortify.php`
+- `resources/views/layouts/app/header.blade.php`
+- `resources/views/layouts/app/sidebar.blade.php`
+- `resources/views/layouts/admin/sidebar.blade.php`
+- `app/Providers/AppServiceProvider.php`
+- `database/seeders/DatabaseSeeder.php`
+- `tests/Feature/DashboardTest.php`
+- `tests/Feature/Auth/AuthenticationTest.php`
+- `tests/Feature/Auth/RegistrationTest.php`
+- `tests/Feature/Auth/EmailVerificationTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/DashboardTest.php tests/Feature/ExampleTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/Auth/RegistrationTest.php tests/Feature/Auth/EmailVerificationTest.php tests/Feature/Admin/AdminAccessTest.php tests/Feature/Database/DevelopmentTestingSeederTest.php`
+- Result: Passing.
