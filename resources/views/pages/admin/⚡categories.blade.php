@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Category;
+use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -8,6 +9,11 @@ use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
+
+    public function rendering(View $view): void
+    {
+        $view->layout('layouts.admin', ['title' => __('Admin Categories')]);
+    }
 
     #[Url(as: 'q')]
     public string $search = '';

@@ -7,11 +7,17 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 new class extends Component {
     public bool $syncQueued = false;
+
+    public function rendering(View $view): void
+    {
+        $view->layout('layouts.admin', ['title' => __('Admin Dashboard')]);
+    }
 
     #[Computed]
     public function stats(): array
