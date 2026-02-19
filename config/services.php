@@ -39,6 +39,7 @@ return [
         'base_url' => env('MAIN_STORE_BASE_URL', ''),
         'token' => env('MAIN_STORE_TOKEN', ''),
         'timeout' => env('MAIN_STORE_TIMEOUT', 10),
+        'stale_threshold_minutes' => env('MAIN_STORE_STALE_THRESHOLD_MINUTES', 60),
     ],
 
 ];

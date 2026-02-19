@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -40,6 +41,61 @@ new class extends Component {
             ->get();
     }
 
+    #[Computed]
+    public function syncHealth(): array
+    {
+        $resources = collect([
+            'brands',
+            'categories',
+            'products',
+            'variant-images',
+            'variants',
+            'inventory',
+            'orders',
+        ]);
+
+        $thresholdMinutes = (int) config('services.main_store.stale_threshold_minutes', 60);
+        $staleCutoff = now()->subMinutes($thresholdMinutes);
+
+        $latestCompletedByResource = SyncRun::query()
+            ->where('status', 'completed')
+            ->whereIn('resource', $resources->all())
+            ->whereNotNull('checkpoint_updated_since')
+            ->latest('checkpoint_updated_since')
+            ->get()
+            ->groupBy('resource')
+            ->map(fn ($runs) => $runs->first());
+
+        $missingResources = $resources
+            ->reject(fn (string $resource): bool => $latestCompletedByResource->has($resource))
+            ->values()
+            ->all();
+
+        $staleResources = $latestCompletedByResource
+            ->filter(fn (SyncRun $syncRun): bool => $syncRun->checkpoint_updated_since?->lt($staleCutoff) ?? true)
+            ->map(fn (SyncRun $syncRun, string $resource): string => sprintf(
+                '%s (%s)',
+                Str::of($resource)->replace('-', ' ')->headline()->value(),
+                optional($syncRun->checkpoint_updated_since)?->diffForHumans() ?? 'never'
+            ))
+            ->values()
+            ->all();
+
+        $latestSuccessfulRun = SyncRun::query()
+            ->where('status', 'completed')
+            ->whereNotNull('checkpoint_updated_since')
+            ->latest('checkpoint_updated_since')
+            ->first();
+
+        return [
+            'is_stale' => $missingResources !== [] || $staleResources !== [],
+            'threshold_minutes' => $thresholdMinutes,
+            'last_synced_at' => $latestSuccessfulRun?->checkpoint_updated_since,
+            'missing_resources' => $missingResources,
+            'stale_resources' => $staleResources,
+        ];
+    }
+
     public function queueSync(): void
     {
         Artisan::call('main-store:sync', [
@@ -54,6 +110,30 @@ new class extends Component {
 <section class="w-full">
     <x-pages::admin.layout :heading="__('Admin Dashboard')" :subheading="__('Monitor sync health and catalog coverage')">
         <div class="space-y-4">
+            @if ($this->syncHealth['is_stale'])
+                <flux:callout icon="exclamation-triangle" variant="warning" heading="{{ __('Sync data is stale') }}">
+                    <div class="space-y-1 text-sm">
+                        <p>
+                            {{ __('No successful sync in the last :minutes minutes for one or more resources.', ['minutes' => $this->syncHealth['threshold_minutes']]) }}
+                        </p>
+                        @if ($this->syncHealth['missing_resources'] !== [])
+                            <p>
+                                {{ __('Missing successful runs: :resources', ['resources' => collect($this->syncHealth['missing_resources'])->map(fn (string $resource) => str($resource)->replace('-', ' ')->headline()->value())->join(', ')]) }}
+                            </p>
+                        @endif
+                        @if ($this->syncHealth['stale_resources'] !== [])
+                            <p>
+                                {{ __('Stale resources: :resources', ['resources' => collect($this->syncHealth['stale_resources'])->join(', ')]) }}
+                            </p>
+                        @endif
+                    </div>
+                </flux:callout>
+            @else
+                <flux:callout icon="check-circle" variant="success" heading="{{ __('Sync data is healthy') }}">
+                    {{ __('All resources have successful sync checkpoints within the last :minutes minutes.', ['minutes' => $this->syncHealth['threshold_minutes']]) }}
+                </flux:callout>
+            @endif
+
             @if ($syncQueued)
                 <flux:callout icon="check-circle" variant="success" heading="{{ __('Sync queued successfully') }}" />
             @endif

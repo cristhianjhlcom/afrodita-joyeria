@@ -38,7 +38,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 ## Pending / Next Phases
 - [x] Add product detail page with variant/image drill-down actions
 - [x] Add sync run detail page and error inspection UI
-- [ ] Add explicit stale-data warnings (e.g. last successful sync threshold)
+- [x] Add explicit stale-data warnings (e.g. last successful sync threshold)
 - [ ] Add retry/trigger actions per resource (brands/categories/products/etc.)
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
 - [ ] Add integration tests for admin filtering and pagination behavior
@@ -178,3 +178,23 @@ Use this format for each session:
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
 - Add stale-data warning threshold on dashboard.
+
+### Session 2026-02-19 (Phase 2 - Stale Sync Alerts)
+- Goal: Add explicit stale-data warnings in admin dashboard using sync checkpoint thresholds.
+- Changes made:
+- Added `services.main_store.stale_threshold_minutes` config and environment variable.
+- Added dashboard sync health computation for required resources:
+- Missing successful sync runs detection.
+- Stale sync checkpoint detection by threshold.
+- Added warning callout for stale/missing syncs and success callout for healthy status.
+- Added feature tests for stale and healthy dashboard states.
+- Files touched:
+- `.env.example`
+- `config/services.php`
+- `resources/views/pages/admin/⚡dashboard.blade.php`
+- `tests/Feature/Admin/AdminDashboardSyncHealthTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminDashboardSyncHealthTest.php tests/Feature/Admin/AdminModulesAccessTest.php tests/Feature/Console/SyncMainStoreCommandTest.php`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Add retry/trigger actions per resource from admin UI.
