@@ -34,13 +34,17 @@ new class extends Component {
     #[Computed]
     public function variants()
     {
+        $searchTerm = trim($this->search);
+
         return ProductVariant::query()
             ->with('product')
-            ->when($this->search !== '', function ($query): void {
-                $query
-                    ->where('sku', 'like', "%{$this->search}%")
-                    ->orWhere('code', 'like', "%{$this->search}%")
-                    ->orWhereHas('product', fn ($productQuery) => $productQuery->where('name', 'like', "%{$this->search}%"));
+            ->when($searchTerm !== '', function ($query) use ($searchTerm): void {
+                $query->where(function ($searchQuery) use ($searchTerm): void {
+                    $searchQuery
+                        ->where('sku', 'like', "%{$searchTerm}%")
+                        ->orWhere('code', 'like', "%{$searchTerm}%")
+                        ->orWhereHas('product', fn ($productQuery) => $productQuery->where('name', 'like', "%{$searchTerm}%"));
+                });
             })
             ->when($this->onlyLowStock, fn ($query) => $query->where('stock_available', '<=', 5))
             ->latest('updated_at')

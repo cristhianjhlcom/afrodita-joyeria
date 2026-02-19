@@ -42,7 +42,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [x] Add retry/trigger actions per resource (brands/categories/products/etc.)
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
 - [x] Add integration tests for admin filtering and pagination behavior
-- [ ] Add performance guardrails (indexes review, query optimization checks)
+- [x] Add performance guardrails (indexes review, query optimization checks)
 - [ ] Optional: notification/alerting for repeated sync failures
 
 ## Environment / Ops Checklist
@@ -243,3 +243,26 @@ Use this format for each session:
 - Tests run:
 - `php artisan test --compact tests/Feature/Admin/AdminFilteringPaginationTest.php`
 - Result: Passing.
+
+### Session 2026-02-19 (Phase 2 - Performance Guardrails)
+- Goal: Improve query performance safety for admin/sync workflows.
+- Changes made:
+- Added dedicated migration with indexes for high-frequency query patterns:
+- Brand/category name sorting/filter support.
+- Product filtering by brand/subcategory + recency.
+- Inventory low-stock + recency.
+- Orders recency sorting.
+- Sync run drill-down and checkpoint health queries.
+- Optimized orders search query to use exact indexed match when numeric.
+- Fixed inventory filter query grouping so search + low-stock constraints combine correctly.
+- Added integration test coverage for combined inventory filters.
+- Files touched:
+- `database/migrations/2026_02_19_233814_add_performance_indexes_for_admin_queries.php`
+- `resources/views/pages/admin/⚡orders.blade.php`
+- `resources/views/pages/admin/⚡inventory.blade.php`
+- `tests/Feature/Admin/AdminFilteringPaginationTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminFilteringPaginationTest.php tests/Feature/Admin tests/Feature/Console/SyncMainStoreCommandTest.php`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Optional repeated sync failure alerting.

@@ -108,6 +108,39 @@ it('filters inventory by low stock toggle', function () {
         ->assertDontSee('INV-HIGH-001');
 });
 
+it('applies inventory search and low stock filters together', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::Admin,
+    ]);
+
+    $matchingProduct = Product::factory()->create([
+        'name' => 'Aurora Bracelet',
+    ]);
+
+    $otherProduct = Product::factory()->create([
+        'name' => 'Luna Necklace',
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $matchingProduct->id,
+        'sku' => 'AURORA-LOW-01',
+        'stock_available' => 2,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $otherProduct->id,
+        'sku' => 'LUNA-HIGH-01',
+        'stock_available' => 20,
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::admin.inventory')
+        ->set('search', 'Luna')
+        ->set('onlyLowStock', true)
+        ->assertDontSee('AURORA-LOW-01')
+        ->assertDontSee('LUNA-HIGH-01');
+});
+
 it('filters and paginates mirrored orders list', function () {
     $admin = User::factory()->create([
         'role' => UserRole::Admin,

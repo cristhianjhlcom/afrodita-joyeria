@@ -26,9 +26,19 @@ new class extends Component {
     #[Computed]
     public function orders()
     {
+        $searchTerm = trim($this->search);
+
         return Order::query()
             ->withCount('items')
-            ->when($this->search !== '', fn ($query) => $query->where('external_id', 'like', "%{$this->search}%"))
+            ->when($searchTerm !== '', function ($query) use ($searchTerm): void {
+                if (ctype_digit($searchTerm)) {
+                    $query->where('external_id', (int) $searchTerm);
+
+                    return;
+                }
+
+                $query->where('external_id', 'like', "%{$searchTerm}%");
+            })
             ->latest('placed_at')
             ->paginate(12);
     }
