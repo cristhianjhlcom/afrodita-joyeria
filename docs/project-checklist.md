@@ -39,7 +39,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [x] Add product detail page with variant/image drill-down actions
 - [x] Add sync run detail page and error inspection UI
 - [x] Add explicit stale-data warnings (e.g. last successful sync threshold)
-- [ ] Add retry/trigger actions per resource (brands/categories/products/etc.)
+- [x] Add retry/trigger actions per resource (brands/categories/products/etc.)
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
 - [ ] Add integration tests for admin filtering and pagination behavior
 - [ ] Add performance guardrails (indexes review, query optimization checks)
@@ -198,3 +198,21 @@ Use this format for each session:
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
 - Add retry/trigger actions per resource from admin UI.
+
+### Session 2026-02-19 (Phase 2 - Resource Trigger Actions)
+- Goal: Add per-resource sync trigger/retry controls from admin dashboard.
+- Changes made:
+- Added per-resource sync control table to admin dashboard:
+- Queue action for each resource.
+- Retry action for resources whose latest run failed.
+- Added command/resource mapping so `images` command is tracked against `variant-images` sync runs.
+- Added server-side guard to ignore unsupported resource trigger input.
+- Added feature tests for queue dispatch, unsupported resource guard, and retry visibility.
+- Files touched:
+- `resources/views/pages/admin/⚡dashboard.blade.php`
+- `tests/Feature/Admin/AdminDashboardResourceSyncActionsTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminDashboardResourceSyncActionsTest.php tests/Feature/Admin/AdminDashboardSyncHealthTest.php tests/Feature/Console/SyncMainStoreCommandTest.php`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Add integration tests for admin filtering and pagination behavior.

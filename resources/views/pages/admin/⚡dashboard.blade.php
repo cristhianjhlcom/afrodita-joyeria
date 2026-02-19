@@ -7,13 +7,14 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 new class extends Component {
     public bool $syncQueued = false;
+
+    public ?string $queuedResource = null;
 
     public function rendering(View $view): void
     {
@@ -39,6 +40,59 @@ new class extends Component {
             ->latest('started_at')
             ->limit(8)
             ->get();
+    }
+
+    /**
+     * @return array<int, array{command: string, run_resource: string, label: string}>
+     */
+    protected function supportedSyncResources(): array
+    {
+        return [
+            ['command' => 'brands', 'run_resource' => 'brands', 'label' => 'Brands'],
+            ['command' => 'categories', 'run_resource' => 'categories', 'label' => 'Categories'],
+            ['command' => 'products', 'run_resource' => 'products', 'label' => 'Products'],
+            ['command' => 'variants', 'run_resource' => 'variants', 'label' => 'Variants'],
+            ['command' => 'images', 'run_resource' => 'variant-images', 'label' => 'Variant Images'],
+            ['command' => 'inventory', 'run_resource' => 'inventory', 'label' => 'Inventory'],
+            ['command' => 'orders', 'run_resource' => 'orders', 'label' => 'Orders'],
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function supportedSyncCommands(): array
+    {
+        return collect($this->supportedSyncResources())
+            ->pluck('command')
+            ->all();
+    }
+
+    #[Computed]
+    public function resourceSyncStatus(): array
+    {
+        $resourceMap = collect($this->supportedSyncResources());
+        $latestRuns = SyncRun::query()
+            ->whereIn('resource', $resourceMap->pluck('run_resource')->all())
+            ->latest('started_at')
+            ->get()
+            ->groupBy('resource')
+            ->map(fn ($runs) => $runs->first());
+
+        return $resourceMap
+            ->map(function (array $resourceConfig) use ($latestRuns): array {
+                /** @var SyncRun|null $run */
+                $run = $latestRuns->get($resourceConfig['run_resource']);
+
+                return [
+                    'command' => $resourceConfig['command'],
+                    'run_resource' => $resourceConfig['run_resource'],
+                    'label' => $resourceConfig['label'],
+                    'run' => $run,
+                    'can_retry' => $run?->status === 'failed',
+                ];
+            })
+            ->all();
     }
 
     #[Computed]
@@ -104,6 +158,24 @@ new class extends Component {
         ]);
 
         $this->syncQueued = true;
+        $this->queuedResource = null;
+    }
+
+    public function queueResourceSync(string $resource): void
+    {
+        if (! in_array($resource, $this->supportedSyncCommands(), true)) {
+            return;
+        }
+
+        Artisan::call('main-store:sync', [
+            'resource' => $resource,
+            '--queued' => true,
+        ]);
+
+        $this->syncQueued = false;
+        $this->queuedResource = $resource;
+        unset($this->resourceSyncStatus);
+        unset($this->recentSyncRuns);
     }
 }; ?>
 
@@ -136,6 +208,13 @@ new class extends Component {
 
             @if ($syncQueued)
                 <flux:callout icon="check-circle" variant="success" heading="{{ __('Sync queued successfully') }}" />
+            @endif
+            @if ($queuedResource !== null)
+                <flux:callout
+                    icon="check-circle"
+                    variant="success"
+                    :heading="__('Sync queued for :resource', ['resource' => str($queuedResource)->replace('-', ' ')->headline()->value()])"
+                />
             @endif
 
             <div class="grid gap-3 md:grid-cols-5">
@@ -199,6 +278,52 @@ new class extends Component {
                     @endforelse
                 </flux:table.rows>
             </flux:table>
+
+            <div class="space-y-2">
+                <flux:subheading>{{ __('Resource Sync Controls') }}</flux:subheading>
+
+                <flux:table>
+                    <flux:table.columns>
+                        <flux:table.column>{{ __('Resource') }}</flux:table.column>
+                        <flux:table.column>{{ __('Last Status') }}</flux:table.column>
+                        <flux:table.column>{{ __('Last Checkpoint') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Errors') }}</flux:table.column>
+                        <flux:table.column align="end">{{ __('Actions') }}</flux:table.column>
+                    </flux:table.columns>
+                    <flux:table.rows>
+                        @foreach ($this->resourceSyncStatus as $resourceStatus)
+                            <flux:table.row :key="$resourceStatus['command']">
+                                <flux:table.cell variant="strong">{{ $resourceStatus['label'] }}</flux:table.cell>
+                                <flux:table.cell>{{ str($resourceStatus['run']?->status ?? 'never')->headline() }}</flux:table.cell>
+                                <flux:table.cell>{{ optional($resourceStatus['run']?->checkpoint_updated_since)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ number_format($resourceStatus['run']?->errors_count ?? 0) }}</flux:table.cell>
+                                <flux:table.cell align="end">
+                                    <div class="flex justify-end gap-2">
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            wire:click="queueResourceSync('{{ $resourceStatus['command'] }}')"
+                                            wire:loading.attr="disabled"
+                                        >
+                                            {{ __('Queue') }}
+                                        </flux:button>
+                                        @if ($resourceStatus['can_retry'])
+                                            <flux:button
+                                                size="sm"
+                                                variant="primary"
+                                                wire:click="queueResourceSync('{{ $resourceStatus['command'] }}')"
+                                                wire:loading.attr="disabled"
+                                            >
+                                                {{ __('Retry Failed') }}
+                                            </flux:button>
+                                        @endif
+                                    </div>
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @endforeach
+                    </flux:table.rows>
+                </flux:table>
+            </div>
         </div>
     </x-pages::admin.layout>
 </section>
