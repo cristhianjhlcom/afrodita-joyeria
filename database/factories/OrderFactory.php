@@ -29,4 +29,32 @@ class OrderFactory extends Factory
             'placed_at' => now(),
         ];
     }
+
+    public function pending(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'pending',
+        ]);
+    }
+
+    public function paid(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'paid',
+        ]);
+    }
+
+    public function shipped(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'shipped',
+        ]);
+    }
+
+    public function completed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'completed',
+        ]);
+    }
 }

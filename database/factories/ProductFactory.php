@@ -30,4 +30,25 @@ class ProductFactory extends Factory
             'status' => Product::STATUS_DRAFT,
         ];
     }
+
+    public function published(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => Product::STATUS_PUBLISHED,
+        ]);
+    }
+
+    public function inStock(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => Product::STATUS_IN_STOCK,
+        ]);
+    }
+
+    public function outOfStock(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => Product::STATUS_OUT_OF_STOCK,
+        ]);
+    }
 }

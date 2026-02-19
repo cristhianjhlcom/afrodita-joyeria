@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Category;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -24,5 +25,19 @@ class CategoryFactory extends Factory
             'slug' => Str::slug($name.'-'.fake()->unique()->numerify('###')),
             'is_active' => true,
         ];
+    }
+
+    public function subcategory(?Category $parent = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'parent_id' => $parent?->id ?? Category::factory(),
+        ]);
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => false,
+        ]);
     }
 }

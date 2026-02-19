@@ -20,4 +20,11 @@ class BrandWhitelistFactory extends Factory
             'enabled' => true,
         ];
     }
+
+    public function disabled(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'enabled' => false,
+        ]);
+    }
 }

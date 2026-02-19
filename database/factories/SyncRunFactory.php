@@ -25,4 +25,35 @@ class SyncRunFactory extends Factory
             'meta' => null,
         ];
     }
+
+    public function completed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'completed',
+            'errors_count' => 0,
+            'finished_at' => now(),
+        ]);
+    }
+
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'failed',
+            'errors_count' => fake()->numberBetween(1, 5),
+            'meta' => [
+                'errors' => [
+                    fake()->sentence(6),
+                ],
+            ],
+            'finished_at' => now(),
+        ]);
+    }
+
+    public function running(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'running',
+            'finished_at' => null,
+        ]);
+    }
 }

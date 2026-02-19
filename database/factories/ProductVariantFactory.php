@@ -16,6 +16,8 @@ class ProductVariantFactory extends Factory
     public function definition(): array
     {
         $price = fake()->numberBetween(1000, 100000);
+        $stockOnHand = fake()->numberBetween(0, 100);
+        $stockReserved = fake()->numberBetween(0, min(10, $stockOnHand));
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
@@ -27,10 +29,50 @@ class ProductVariantFactory extends Factory
             'color' => fake()->safeColorName(),
             'hex' => fake()->hexColor(),
             'size' => fake()->randomElement(['XS', 'S', 'M', 'L', 'XL']),
-            'stock_on_hand' => fake()->numberBetween(0, 100),
-            'stock_reserved' => fake()->numberBetween(0, 5),
-            'stock_available' => fake()->numberBetween(0, 95),
+            'stock_on_hand' => $stockOnHand,
+            'stock_reserved' => $stockReserved,
+            'stock_available' => max(0, $stockOnHand - $stockReserved),
             'is_active' => true,
         ];
+    }
+
+    public function onSale(): static
+    {
+        return $this->state(function (array $attributes): array {
+            $price = $attributes['price'] ?? fake()->numberBetween(1000, 100000);
+
+            return [
+                'price' => $price,
+                'sale_price' => max(100, (int) $price - fake()->numberBetween(100, 1200)),
+            ];
+        });
+    }
+
+    public function outOfStock(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'stock_on_hand' => 0,
+            'stock_reserved' => 0,
+            'stock_available' => 0,
+        ]);
+    }
+
+    public function lowStock(): static
+    {
+        $stockOnHand = fake()->numberBetween(1, 5);
+        $stockReserved = fake()->numberBetween(0, min(2, $stockOnHand));
+
+        return $this->state(fn (array $attributes): array => [
+            'stock_on_hand' => $stockOnHand,
+            'stock_reserved' => $stockReserved,
+            'stock_available' => max(0, $stockOnHand - $stockReserved),
+        ]);
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => false,
+        ]);
     }
 }
