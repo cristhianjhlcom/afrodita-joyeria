@@ -37,7 +37,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 
 ## Pending / Next Phases
 - [x] Add product detail page with variant/image drill-down actions
-- [ ] Add sync run detail page and error inspection UI
+- [x] Add sync run detail page and error inspection UI
 - [ ] Add explicit stale-data warnings (e.g. last successful sync threshold)
 - [ ] Add retry/trigger actions per resource (brands/categories/products/etc.)
 - [ ] Add policies/gates for finer permissions (if needed beyond admin/customer)
@@ -158,3 +158,23 @@ Use this format for each session:
 - Tests run:
 - `php artisan test --compact tests/Feature/DashboardTest.php tests/Feature/ExampleTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/Auth/RegistrationTest.php tests/Feature/Auth/EmailVerificationTest.php tests/Feature/Admin/AdminAccessTest.php tests/Feature/Database/DevelopmentTestingSeederTest.php`
 - Result: Passing.
+
+### Session 2026-02-19 (Phase 2 - Sync Run Inspection)
+- Goal: Add sync run detail and error inspection tooling for admin operations.
+- Changes made:
+- Added `admin.sync-runs.show` route for drill-down by sync run.
+- Added dashboard table action to open sync run detail.
+- Added Livewire page to inspect run summary, error messages, and raw `meta` payload.
+- Added access tests for admin/customer authorization on sync run detail.
+- Added feature test for detail rendering and dashboard action link.
+- Files touched:
+- `routes/web.php`
+- `resources/views/pages/admin/⚡dashboard.blade.php`
+- `resources/views/pages/admin/⚡sync-run-detail.blade.php`
+- `tests/Feature/Admin/AdminModulesAccessTest.php`
+- `tests/Feature/Admin/SyncRunDetailViewTest.php`
+- Tests run:
+- `php artisan test --compact tests/Feature/Admin/AdminModulesAccessTest.php tests/Feature/Admin/SyncRunDetailViewTest.php tests/Feature/Console/SyncMainStoreCommandTest.php`
+- Result: Passing (to be re-confirmed after final test run).
+- Next action:
+- Add stale-data warning threshold on dashboard.

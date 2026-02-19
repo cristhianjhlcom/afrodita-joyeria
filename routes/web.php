@@ -17,6 +17,7 @@ Route::middleware(['auth', 'verified', 'admin'])
         Route::livewire('products/{product}', 'pages::admin.product-detail')->name('products.show');
         Route::livewire('inventory', 'pages::admin.inventory')->name('inventory');
         Route::livewire('orders', 'pages::admin.orders')->name('orders');
+        Route::livewire('sync-runs/{syncRun}', 'pages::admin.sync-run-detail')->name('sync-runs.show');
     });
 
 require __DIR__.'/settings.php';

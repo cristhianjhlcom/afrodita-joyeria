@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Models\Product;
+use App\Models\SyncRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -36,6 +37,18 @@ it('allows admins to access product detail module', function () {
         ->assertSuccessful();
 });
 
+it('allows admins to access sync run detail module', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::Admin,
+    ]);
+
+    $syncRun = SyncRun::factory()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.sync-runs.show', $syncRun))
+        ->assertSuccessful();
+});
+
 it('forbids customers from admin modules', function (string $routeName) {
     $customer = User::factory()->create([
         'role' => UserRole::Customer,
@@ -62,5 +75,17 @@ it('forbids customers from product detail module', function () {
 
     $this->actingAs($customer)
         ->get(route('admin.products.show', $product))
+        ->assertForbidden();
+});
+
+it('forbids customers from sync run detail module', function () {
+    $customer = User::factory()->create([
+        'role' => UserRole::Customer,
+    ]);
+
+    $syncRun = SyncRun::factory()->create();
+
+    $this->actingAs($customer)
+        ->get(route('admin.sync-runs.show', $syncRun))
         ->assertForbidden();
 });

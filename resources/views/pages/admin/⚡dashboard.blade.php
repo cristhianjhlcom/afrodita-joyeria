@@ -96,6 +96,7 @@ new class extends Component {
                     <flux:table.column>{{ __('Started') }}</flux:table.column>
                     <flux:table.column>{{ __('Finished') }}</flux:table.column>
                     <flux:table.column align="end">{{ __('Processed') }}</flux:table.column>
+                    <flux:table.column align="end">{{ __('Action') }}</flux:table.column>
                 </flux:table.columns>
                 <flux:table.rows>
                     @forelse ($this->recentSyncRuns as $syncRun)
@@ -105,10 +106,15 @@ new class extends Component {
                             <flux:table.cell>{{ optional($syncRun->started_at)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
                             <flux:table.cell>{{ optional($syncRun->finished_at)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
                             <flux:table.cell align="end">{{ number_format($syncRun->records_processed) }}</flux:table.cell>
+                            <flux:table.cell align="end">
+                                <flux:button size="sm" variant="ghost" :href="route('admin.sync-runs.show', $syncRun)" wire:navigate>
+                                    {{ __('View') }}
+                                </flux:button>
+                            </flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="5">{{ __('No sync runs yet.') }}</flux:table.cell>
+                            <flux:table.cell colspan="6">{{ __('No sync runs yet.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>
