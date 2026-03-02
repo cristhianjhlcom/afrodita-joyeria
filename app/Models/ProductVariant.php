@@ -79,7 +79,7 @@ class ProductVariant extends Model
             return '-';
         }
 
-        $resolvedCurrency = $currency ?? config('services.main_store.currency', 'COP');
+        $resolvedCurrency = $currency ?? config('services.main_store.currency', 'PEN');
 
         return money($amount, $resolvedCurrency)->format();
     }

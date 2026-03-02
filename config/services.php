@@ -38,7 +38,7 @@ return [
     'main_store' => [
         'base_url' => env('MAIN_STORE_BASE_URL', ''),
         'token' => env('MAIN_STORE_TOKEN', ''),
-        'currency' => env('MAIN_STORE_CURRENCY', 'COP'),
+        'currency' => env('MAIN_STORE_CURRENCY', 'PEN'),
         'timeout' => env('MAIN_STORE_TIMEOUT', 10),
         'stale_threshold_minutes' => env('MAIN_STORE_STALE_THRESHOLD_MINUTES', 60),
         'failure_alert_threshold' => env('MAIN_STORE_FAILURE_ALERT_THRESHOLD', 3),
