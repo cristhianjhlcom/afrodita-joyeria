@@ -69,6 +69,7 @@ new class extends Component {
 
                 <flux:table>
                     <flux:table.columns>
+                        <flux:table.column>{{ __('Image') }}</flux:table.column>
                         <flux:table.column>{{ __('SKU') }}</flux:table.column>
                         <flux:table.column>{{ __('Color') }}</flux:table.column>
                         <flux:table.column>{{ __('Size') }}</flux:table.column>
@@ -80,6 +81,14 @@ new class extends Component {
                     <flux:table.rows>
                         @forelse ($this->productDetails->variants as $variant)
                             <flux:table.row :key="$variant->id">
+                                <flux:table.cell>
+                                    <flux:avatar
+                                        size="sm"
+                                        :name="$variant->sku ?? $variant->code ?? $this->productDetails->name"
+                                        :src="$variant->primary_image_url"
+                                        :alt="$variant->sku ?? $variant->code ?? $this->productDetails->name"
+                                    />
+                                </flux:table.cell>
                                 <flux:table.cell variant="strong">{{ $variant->sku ?? $variant->code ?? '-' }}</flux:table.cell>
                                 <flux:table.cell>{{ $variant->color ?? '-' }}</flux:table.cell>
                                 <flux:table.cell>{{ $variant->size ?? '-' }}</flux:table.cell>
@@ -90,7 +99,7 @@ new class extends Component {
                             </flux:table.row>
                         @empty
                             <flux:table.row>
-                                <flux:table.cell colspan="7">{{ __('No variants available for this product.') }}</flux:table.cell>
+                                <flux:table.cell colspan="8">{{ __('No variants available for this product.') }}</flux:table.cell>
                             </flux:table.row>
                         @endforelse
                     </flux:table.rows>
