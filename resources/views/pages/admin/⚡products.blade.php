@@ -192,7 +192,7 @@ new class extends Component {
                 <flux:table.rows>
                     @forelse ($this->products as $product)
                         <flux:table.row :key="$product->id">
-                            <flux:table.cell variant="strong">
+                            <flux:table.cell variant="strong" class="max-w-56 whitespace-normal break-words">
                                 <div class="flex items-center gap-3">
                                     <flux:avatar
                                         size="sm"
