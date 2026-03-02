@@ -13,7 +13,10 @@ use App\Models\ProductVariant;
 use App\Models\SyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 class MainStoreSyncService
 {
@@ -29,9 +32,9 @@ class MainStoreSyncService
                         'name' => (string) ($item['name'] ?? ''),
                         'slug' => $item['slug'] ?? null,
                         'is_active' => (bool) ($item['is_active'] ?? true),
-                        'deleted_at' => $item['deleted_at'] ?? null,
-                        'updated_at' => $item['updated_at'] ?? now(),
-                        'created_at' => $item['created_at'] ?? now(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
                     ];
                 })
                 ->values();
@@ -65,95 +68,308 @@ class MainStoreSyncService
 
     public function syncCategories(): int
     {
-        return $this->syncResource('categories', function (array $items): int {
-            $rows = collect($items)
-                ->map(fn (array $item): array => [
-                    'external_id' => (int) $item['id'],
-                    'name' => (string) ($item['name'] ?? ''),
-                    'slug' => $item['slug'] ?? null,
-                    'is_active' => (bool) ($item['is_active'] ?? true),
-                    'deleted_at' => $item['deleted_at'] ?? null,
-                    'updated_at' => $item['updated_at'] ?? now(),
-                    'created_at' => $item['created_at'] ?? now(),
-                ])
-                ->values();
+        $syncRun = SyncRun::query()->create([
+            'resource' => 'categories',
+            'status' => 'running',
+            'started_at' => now(),
+            'records_processed' => 0,
+            'errors_count' => 0,
+        ]);
 
-            Category::query()->upsert(
-                $rows->all(),
-                ['external_id'],
-                ['name', 'slug', 'is_active', 'deleted_at', 'updated_at', 'created_at'],
-            );
+        $processed = 0;
+        $checkpoint = $this->resolveCheckpoint('categories');
 
-            $categories = Category::query()
-                ->whereIn('external_id', $rows->pluck('external_id'))
-                ->get(['id', 'external_id'])
-                ->keyBy('external_id');
+        try {
+            $processed += $this->syncCategoryResource('categories', 'parent_id', $checkpoint, false);
+            $processed += $this->syncCategoryResource('subcategories', 'category_id', $checkpoint, true);
 
-            foreach ($items as $item) {
-                $category = $categories->get((int) $item['id']);
-                if (! $category) {
-                    continue;
-                }
+            $syncRun->update([
+                'status' => 'completed',
+                'finished_at' => now(),
+                'records_processed' => $processed,
+                'checkpoint_updated_since' => now(),
+            ]);
+        } catch (\Throwable $throwable) {
+            $syncRun->update([
+                'status' => 'failed',
+                'finished_at' => now(),
+                'records_processed' => $processed,
+                'errors_count' => 1,
+                'meta' => ['error' => $throwable->getMessage()],
+            ]);
 
-                $parentExternalId = Arr::get($item, 'parent_id');
-                $parentId = $parentExternalId !== null
-                    ? optional($categories->get((int) $parentExternalId))->id
-                    : null;
+            throw $throwable;
+        }
 
-                $category->update(['parent_id' => $parentId]);
-            }
-
-            return $rows->count();
-        });
+        return $processed;
     }
 
     public function syncProducts(): int
     {
-        return $this->syncResource('products', function (array $items): int {
+        $tokenBrandScopes = $this->resolveTokenBrandScopes();
+        $seenProductsByToken = [];
+        $seenVariantsByToken = [];
+        $seenImagesByToken = [];
+        $scopedBrandsByToken = [];
+
+        return $this->syncResource('products', function (array $items, string $token) use (
+            $tokenBrandScopes,
+            &$seenProductsByToken,
+            &$seenVariantsByToken,
+            &$seenImagesByToken,
+            &$scopedBrandsByToken
+        ): int {
             $brandMap = Brand::query()->pluck('id', 'external_id');
             $categoryMap = Category::query()->pluck('id', 'external_id');
+            $categoryBySlug = Category::query()->pluck('id', 'slug');
+            $categoryByName = Category::query()->pluck('id', 'name');
+            $categoryByNameLower = Category::query()
+                ->get(['id', 'name'])
+                ->mapWithKeys(fn (Category $category): array => [Str::lower((string) $category->name) => $category->id]);
             $whitelistedBrandIds = BrandWhitelist::query()
                 ->where('enabled', true)
                 ->pluck('brand_id')
                 ->all();
+            $brandBySlug = Brand::query()->pluck('id', 'slug');
+            $brandByName = Brand::query()->pluck('id', 'name');
+            $brandByNameLower = Brand::query()
+                ->get(['id', 'name'])
+                ->mapWithKeys(fn (Brand $brand): array => [Str::lower((string) $brand->name) => $brand->id]);
 
-            $rows = collect($items)
-                ->map(function (array $item) use ($brandMap, $categoryMap): ?array {
-                    $brandId = $brandMap->get((int) ($item['brand_id'] ?? 0));
-                    $subcategoryId = $categoryMap->get((int) ($item['subcategory_id'] ?? 0));
+            $scopedBrandIds = $tokenBrandScopes[$token] ?? [];
+            $scopedBrandsByToken[$token] = $scopedBrandIds;
 
-                    if ($brandId === null || $subcategoryId === null) {
-                        return null;
+            $rows = collect();
+            $variantRows = collect();
+            $imageRows = collect();
+            $seenProductRefs = [];
+            $seenVariantRefs = [];
+            $seenImageRefs = [];
+
+            foreach ($items as $item) {
+                $brandId = $brandMap->get((int) ($item['brand_id'] ?? 0));
+                if ($brandId === null) {
+                    $brandId = $this->resolveBrandIdFromNestedPayload($item, $brandBySlug, $brandByName, $brandByNameLower);
+                }
+
+                $categoryId = $categoryMap->get((int) ($item['category_id'] ?? 0));
+                if ($categoryId === null) {
+                    $categoryId = $this->resolveCategoryIdFromNestedPayload($item);
+                }
+
+                $subcategoryId = $categoryMap->get((int) ($item['subcategory_id'] ?? 0));
+                if ($subcategoryId === null) {
+                    $subcategoryId = $this->resolveSubcategoryIdFromNestedPayload(
+                        $item,
+                        $categoryBySlug,
+                        $categoryByName,
+                        $categoryByNameLower,
+                        $categoryId
+                    );
+                }
+
+                if ($brandId === null || $subcategoryId === null) {
+                    continue;
+                }
+
+                if (! in_array((int) $brandId, $whitelistedBrandIds, true)) {
+                    continue;
+                }
+
+                if ($scopedBrandIds !== [] && ! in_array((int) $brandId, $scopedBrandIds, true)) {
+                    continue;
+                }
+
+                $productExternalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                $productExternalRef = $this->resolveExternalRef($item, "product:{$brandId}:".($item['slug'] ?? ''));
+
+                $rows->push([
+                    'external_id' => $productExternalId,
+                    'external_ref' => $productExternalRef,
+                    'brand_id' => (int) $brandId,
+                    'category_id' => $categoryId,
+                    'subcategory_id' => (int) $subcategoryId,
+                    'name' => (string) ($item['name'] ?? ''),
+                    'slug' => (string) ($item['slug'] ?? "product-{$productExternalRef}"),
+                    'description' => $item['description'] ?? null,
+                    'status' => (string) ($item['status'] ?? Product::STATUS_DRAFT),
+                    'sort_order' => (int) ($item['order'] ?? 0),
+                    'url' => Arr::get($item, 'url'),
+                    'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                    'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                ]);
+                $seenProductRefs[] = $productExternalRef;
+
+                foreach ($this->normalizeUrlList(Arr::get($item, 'images', [])) as $imageIndex => $imageUrl) {
+                    $imageExternalRef = $this->resolveImageExternalRef("product:{$productExternalRef}", $imageUrl, $imageIndex);
+
+                    $imageRows->push([
+                        'external_ref' => $imageExternalRef,
+                        'product_external_ref' => $productExternalRef,
+                        'variant_external_ref' => null,
+                        'url' => $imageUrl,
+                        'sort_order' => $imageIndex,
+                        'is_primary' => $imageIndex === 0,
+                        'alt' => null,
+                        'deleted_at' => null,
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ]);
+
+                    $seenImageRefs[] = $imageExternalRef;
+                }
+
+                foreach (($item['variants'] ?? []) as $variantIndex => $variant) {
+                    if (! is_array($variant)) {
+                        continue;
                     }
 
-                    return [
-                        'external_id' => (int) $item['id'],
-                        'brand_id' => $brandId,
-                        'subcategory_id' => $subcategoryId,
-                        'name' => (string) ($item['name'] ?? ''),
-                        'slug' => (string) ($item['slug'] ?? "product-{$item['id']}"),
-                        'description' => $item['description'] ?? null,
-                        'status' => (string) ($item['status'] ?? Product::STATUS_DRAFT),
-                        'deleted_at' => $item['deleted_at'] ?? null,
-                        'updated_at' => $item['updated_at'] ?? now(),
-                        'created_at' => $item['created_at'] ?? now(),
-                    ];
-                })
-                ->filter()
-                ->filter(fn (array $row): bool => in_array((int) $row['brand_id'], $whitelistedBrandIds, true))
-                ->values();
+                    $variantExternalId = $this->resolveNumericExternalId($variant['id'] ?? null);
+                    $variantExternalRef = $this->resolveExternalRef(
+                        $variant,
+                        "variant:{$productExternalRef}:".($variant['sku'] ?? $variant['code'] ?? "index-{$variantIndex}")
+                    );
+
+                    $variantRows->push([
+                        'external_id' => $variantExternalId,
+                        'external_ref' => $variantExternalRef,
+                        'product_external_ref' => $productExternalRef,
+                        'sku' => $variant['sku'] ?? null,
+                        'code' => $variant['code'] ?? null,
+                        'price' => Arr::get($variant, 'price'),
+                        'sale_price' => Arr::get($variant, 'sale_price'),
+                        'color' => $variant['color'] ?? null,
+                        'hex' => $variant['hex'] ?? null,
+                        'size' => $variant['size'] ?? null,
+                        'primary_image_url' => Arr::get($variant, 'image'),
+                        'stock_available' => (int) ($variant['stock'] ?? 0),
+                        'stock_on_hand' => (int) ($variant['stock'] ?? 0),
+                        'stock_reserved' => 0,
+                        'is_active' => (bool) ($variant['in_stock'] ?? true),
+                        'remote_updated_at' => $this->normalizeTimestamp($variant['updated_at'] ?? $item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($variant['updated_at'] ?? $item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($variant['created_at'] ?? $item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($variant['deleted_at'] ?? null),
+                    ]);
+                    $seenVariantRefs[] = $variantExternalRef;
+
+                    $variantImageUrls = $this->normalizeVariantImageList($variant);
+                    foreach ($variantImageUrls as $variantImageIndex => $variantImageUrl) {
+                        $imageExternalRef = $this->resolveImageExternalRef("variant:{$variantExternalRef}", $variantImageUrl, $variantImageIndex);
+
+                        $imageRows->push([
+                            'external_ref' => $imageExternalRef,
+                            'product_external_ref' => $productExternalRef,
+                            'variant_external_ref' => $variantExternalRef,
+                            'url' => $variantImageUrl,
+                            'sort_order' => $variantImageIndex,
+                            'is_primary' => $variantImageIndex === 0,
+                            'alt' => null,
+                            'deleted_at' => null,
+                            'updated_at' => now()->toDateTimeString(),
+                            'created_at' => now()->toDateTimeString(),
+                        ]);
+
+                        $seenImageRefs[] = $imageExternalRef;
+                    }
+                }
+            }
+
+            $rows = $rows->unique('external_ref')->values();
 
             if ($rows->isEmpty()) {
+                $seenProductsByToken[$token] ??= [];
+                $seenVariantsByToken[$token] ??= [];
+                $seenImagesByToken[$token] ??= [];
+
                 return 0;
             }
 
             Product::query()->upsert(
                 $rows->all(),
-                ['external_id'],
-                ['brand_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'deleted_at', 'updated_at', 'created_at'],
+                ['external_ref'],
+                ['external_id', 'brand_id', 'category_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'sort_order', 'url', 'remote_updated_at', 'deleted_at', 'updated_at', 'created_at'],
             );
 
+            if ($variantRows->isNotEmpty()) {
+                $productIdMap = Product::query()
+                    ->whereIn('external_ref', $rows->pluck('external_ref'))
+                    ->pluck('id', 'external_ref');
+
+                $preparedVariantRows = $variantRows
+                    ->map(function (array $variantRow) use ($productIdMap): ?array {
+                        $productId = $productIdMap->get((string) $variantRow['product_external_ref']);
+                        if ($productId === null) {
+                            return null;
+                        }
+
+                        return Arr::except($variantRow, ['product_external_ref']) + ['product_id' => $productId];
+                    })
+                    ->filter()
+                    ->unique('external_ref')
+                    ->values();
+
+                if ($preparedVariantRows->isNotEmpty()) {
+                    ProductVariant::query()->upsert(
+                        $preparedVariantRows->all(),
+                        ['external_ref'],
+                        ['external_id', 'product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'stock_on_hand', 'stock_reserved', 'stock_available', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                    );
+                }
+            }
+
+            if ($imageRows->isNotEmpty()) {
+                $productIdMap = Product::query()
+                    ->whereIn('external_ref', $rows->pluck('external_ref'))
+                    ->pluck('id', 'external_ref');
+                $variantIdMap = ProductVariant::query()
+                    ->whereIn('external_ref', $variantRows->pluck('external_ref'))
+                    ->pluck('id', 'external_ref');
+
+                $preparedImageRows = $imageRows
+                    ->map(function (array $imageRow) use ($productIdMap, $variantIdMap): ?array {
+                        $productId = $productIdMap->get((string) $imageRow['product_external_ref']);
+                        if ($productId === null) {
+                            return null;
+                        }
+
+                        $variantId = null;
+                        if ($imageRow['variant_external_ref'] !== null) {
+                            $variantId = $variantIdMap->get((string) $imageRow['variant_external_ref']);
+                        }
+
+                        return Arr::except($imageRow, ['product_external_ref', 'variant_external_ref']) + [
+                            'product_id' => $productId,
+                            'product_variant_id' => $variantId,
+                        ];
+                    })
+                    ->filter()
+                    ->unique('external_ref')
+                    ->values();
+
+                if ($preparedImageRows->isNotEmpty()) {
+                    ProductImage::query()->upsert(
+                        $preparedImageRows->all(),
+                        ['external_ref'],
+                        ['product_id', 'product_variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'deleted_at', 'updated_at', 'created_at'],
+                    );
+                }
+            }
+
+            $seenProductsByToken[$token] = array_values(array_unique(array_merge($seenProductsByToken[$token] ?? [], $seenProductRefs)));
+            $seenVariantsByToken[$token] = array_values(array_unique(array_merge($seenVariantsByToken[$token] ?? [], $seenVariantRefs)));
+            $seenImagesByToken[$token] = array_values(array_unique(array_merge($seenImagesByToken[$token] ?? [], $seenImageRefs)));
+
             return $rows->count();
+        }, useCheckpoint: false, afterToken: function (string $token) use (&$seenProductsByToken, &$seenVariantsByToken, &$seenImagesByToken, &$scopedBrandsByToken): void {
+            $this->softDeleteMissingCatalogRecords(
+                $scopedBrandsByToken[$token] ?? [],
+                $seenProductsByToken[$token] ?? [],
+                $seenVariantsByToken[$token] ?? [],
+                $seenImagesByToken[$token] ?? [],
+            );
         });
     }
 
@@ -170,8 +386,12 @@ class MainStoreSyncService
                         return null;
                     }
 
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    $externalRef = $this->resolveExternalRef($item, "variant:{$productId}:".($item['sku'] ?? $item['code'] ?? ''));
+
                     return [
-                        'external_id' => (int) $item['id'],
+                        'external_id' => $externalId,
+                        'external_ref' => $externalRef,
                         'product_id' => $productId,
                         'sku' => $item['sku'] ?? null,
                         'code' => $item['code'] ?? null,
@@ -180,9 +400,11 @@ class MainStoreSyncService
                         'color' => $item['color'] ?? null,
                         'hex' => $item['hex'] ?? null,
                         'size' => $item['size'] ?? null,
-                        'updated_at' => $item['updated_at'] ?? now(),
-                        'created_at' => $item['created_at'] ?? now(),
-                        'deleted_at' => $item['deleted_at'] ?? null,
+                        'primary_image_url' => Arr::get($item, 'image'),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
                     ];
                 })
                 ->filter()
@@ -194,8 +416,8 @@ class MainStoreSyncService
 
             ProductVariant::query()->upsert(
                 $rows->all(),
-                ['external_id'],
-                ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'updated_at', 'created_at', 'deleted_at'],
+                ['external_ref'],
+                ['external_id', 'product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
@@ -222,16 +444,16 @@ class MainStoreSyncService
                     }
 
                     return [
-                        'external_id' => (int) ($item['id'] ?? 0),
+                        'external_ref' => $this->resolveExternalRef($item, "image:{$productId}:".($variantId ?? 'none').':'.((string) ($item['url'] ?? ''))),
                         'product_id' => $productId,
                         'product_variant_id' => $variantId,
                         'url' => (string) ($item['url'] ?? ''),
                         'sort_order' => (int) ($item['sort_order'] ?? 0),
                         'alt' => $item['alt'] ?? null,
                         'is_primary' => (bool) ($item['is_primary'] ?? false),
-                        'updated_at' => $item['updated_at'] ?? now(),
-                        'created_at' => $item['created_at'] ?? now(),
-                        'deleted_at' => $item['deleted_at'] ?? null,
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
                     ];
                 })
                 ->filter(fn (?array $row): bool => $row !== null && $row['url'] !== '')
@@ -243,12 +465,12 @@ class MainStoreSyncService
 
             ProductImage::query()->upsert(
                 $rows->all(),
-                ['external_id'],
+                ['external_ref'],
                 ['product_id', 'product_variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
-        });
+        }, allowMissing: true);
     }
 
     public function syncInventory(): int
@@ -267,7 +489,7 @@ class MainStoreSyncService
                     'stock_on_hand' => (int) ($item['stock_on_hand'] ?? 0),
                     'stock_reserved' => (int) ($item['stock_reserved'] ?? 0),
                     'stock_available' => (int) ($item['stock_available'] ?? 0),
-                    'updated_at' => $item['updated_at'] ?? now(),
+                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
                 ]);
 
                 $updated++;
@@ -291,9 +513,9 @@ class MainStoreSyncService
                     'shipping_total' => (int) ($item['shipping_total'] ?? 0),
                     'tax_total' => (int) ($item['tax_total'] ?? 0),
                     'grand_total' => (int) ($item['grand_total'] ?? 0),
-                    'placed_at' => $item['placed_at'] ?? null,
-                    'updated_at' => $item['updated_at'] ?? now(),
-                    'created_at' => $item['created_at'] ?? now(),
+                    'placed_at' => $this->normalizeTimestamp($item['placed_at'] ?? null),
+                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
                 ])
                 ->values();
 
@@ -343,10 +565,15 @@ class MainStoreSyncService
     }
 
     /**
-     * @param  callable(array<int, array<string, mixed>>): int  $syncer
+     * @param  callable(array<int, array<string, mixed>>): int|callable(array<int, array<string, mixed>>, string): int  $syncer
      */
-    protected function syncResource(string $resource, callable $syncer): int
-    {
+    protected function syncResource(
+        string $resource,
+        callable $syncer,
+        bool $allowMissing = false,
+        bool $useCheckpoint = true,
+        ?callable $afterToken = null
+    ): int {
         $syncRun = SyncRun::query()->create([
             'resource' => $resource,
             'status' => 'running',
@@ -356,20 +583,37 @@ class MainStoreSyncService
         ]);
 
         $processed = 0;
-        $cursor = null;
-        $checkpoint = $this->resolveCheckpoint($resource);
+        $checkpoint = $useCheckpoint ? $this->resolveCheckpoint($resource) : null;
+        $tokens = $this->resolveIntegrationTokens();
 
         try {
-            do {
-                $response = $this->client->fetch($resource, $checkpoint?->toIso8601String(), $cursor);
-                $items = $response['data'];
+            foreach ($tokens as $token) {
+                $cursor = null;
 
-                DB::transaction(function () use ($syncer, $items, &$processed): void {
-                    $processed += $syncer($items);
-                });
+                do {
+                    $response = $this->client->fetch(
+                        resource: $resource,
+                        updatedSince: $checkpoint?->toIso8601String(),
+                        cursor: $cursor,
+                        allowMissing: $allowMissing,
+                        token: $token
+                    );
+                    if ($response === null) {
+                        break;
+                    }
+                    $items = $response['data'];
 
-                $cursor = Arr::get($response, 'meta.next_cursor');
-            } while ($cursor !== null);
+                    DB::transaction(function () use ($syncer, $items, $token, &$processed): void {
+                        $processed += $this->invokeSyncer($syncer, $items, $token);
+                    });
+
+                    $cursor = Arr::get($response, 'meta.next_cursor');
+                } while ($cursor !== null);
+
+                if ($afterToken !== null) {
+                    $afterToken($token);
+                }
+            }
 
             $syncRun->update([
                 'status' => 'completed',
@@ -392,6 +636,21 @@ class MainStoreSyncService
         return $processed;
     }
 
+    /**
+     * @param  callable(array<int, array<string, mixed>>): int|callable(array<int, array<string, mixed>>, string): int  $syncer
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    protected function invokeSyncer(callable $syncer, array $items, string $token): int
+    {
+        $reflection = new \ReflectionFunction(\Closure::fromCallable($syncer));
+
+        if ($reflection->getNumberOfParameters() >= 2) {
+            return $syncer($items, $token);
+        }
+
+        return $syncer($items);
+    }
+
     protected function resolveCheckpoint(string $resource): ?CarbonImmutable
     {
         $lastRun = SyncRun::query()
@@ -406,5 +665,469 @@ class MainStoreSyncService
         }
 
         return CarbonImmutable::parse($lastRun->checkpoint_updated_since);
+    }
+
+    protected function syncCategoryResource(
+        string $resource,
+        string $parentReferenceField,
+        ?CarbonImmutable $checkpoint,
+        bool $allowMissing
+    ): int {
+        $processed = 0;
+        $tokens = $this->resolveIntegrationTokens();
+
+        foreach ($tokens as $token) {
+            $cursor = null;
+
+            do {
+                $response = $this->client->fetch(
+                    resource: $resource,
+                    updatedSince: $checkpoint?->toIso8601String(),
+                    cursor: $cursor,
+                    allowMissing: $allowMissing,
+                    token: $token,
+                );
+
+                if ($response === null) {
+                    break;
+                }
+
+                $items = $response['data'];
+
+                DB::transaction(function () use ($items, $parentReferenceField, &$processed): void {
+                    $processed += $this->upsertCategories($items, $parentReferenceField);
+                });
+
+                $cursor = Arr::get($response, 'meta.next_cursor');
+            } while ($cursor !== null);
+        }
+
+        return $processed;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    protected function upsertCategories(array $items, string $parentReferenceField): int
+    {
+        $rows = collect($items)
+            ->map(fn (array $item): array => [
+                'external_id' => (int) $item['id'],
+                'name' => (string) ($item['name'] ?? ''),
+                'slug' => $item['slug'] ?? null,
+                'is_active' => (bool) ($item['is_active'] ?? true),
+                'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+            ])
+            ->values();
+
+        if ($rows->isEmpty()) {
+            return 0;
+        }
+
+        Category::query()->upsert(
+            $rows->all(),
+            ['external_id'],
+            ['name', 'slug', 'is_active', 'deleted_at', 'updated_at', 'created_at'],
+        );
+
+        $externalIds = collect($items)
+            ->flatMap(fn (array $item): array => [
+                (int) $item['id'],
+                (int) ($item[$parentReferenceField] ?? 0),
+            ])
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        $categories = Category::query()
+            ->whereIn('external_id', $externalIds)
+            ->get(['id', 'external_id'])
+            ->keyBy('external_id');
+
+        foreach ($items as $item) {
+            $category = $categories->get((int) $item['id']);
+            if (! $category) {
+                continue;
+            }
+
+            $parentExternalId = Arr::get($item, $parentReferenceField);
+            $parentId = $parentExternalId !== null
+                ? optional($categories->get((int) $parentExternalId))->id
+                : null;
+
+            $category->update(['parent_id' => $parentId]);
+        }
+
+        return $rows->count();
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  Collection<string, int>  $brandBySlug
+     * @param  Collection<string, int>  $brandByName
+     * @param  Collection<string, int>  $brandByNameLower
+     */
+    protected function resolveBrandIdFromNestedPayload(array $item, Collection $brandBySlug, Collection $brandByName, Collection $brandByNameLower): ?int
+    {
+        $brand = Arr::get($item, 'brand');
+        if (! is_array($brand)) {
+            return null;
+        }
+
+        $slug = (string) Arr::get($brand, 'slug', '');
+        if ($slug !== '') {
+            $found = $brandBySlug->get($slug);
+            if ($found !== null) {
+                return (int) $found;
+            }
+        }
+
+        $name = (string) Arr::get($brand, 'name', '');
+        if ($name !== '') {
+            $found = $brandByName->get($name);
+            if ($found !== null) {
+                return (int) $found;
+            }
+
+            $foundLower = $brandByNameLower->get(Str::lower($name));
+            if ($foundLower !== null) {
+                return (int) $foundLower;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  Collection<string, int>  $categoryBySlug
+     * @param  Collection<string, int>  $categoryByName
+     * @param  Collection<string, int>  $categoryByNameLower
+     */
+    protected function resolveSubcategoryIdFromNestedPayload(
+        array $item,
+        Collection $categoryBySlug,
+        Collection $categoryByName,
+        Collection $categoryByNameLower,
+        ?int $parentCategoryId = null
+    ): ?int {
+        $subcategory = Arr::get($item, 'subcategory');
+        if (! is_array($subcategory)) {
+            return null;
+        }
+
+        $slug = (string) Arr::get($subcategory, 'slug', '');
+        $name = (string) Arr::get($subcategory, 'name', '');
+
+        if ($slug === '' && $name !== '') {
+            $slug = Str::slug($name);
+        }
+
+        if ($slug !== '') {
+            $found = $categoryBySlug->get($slug);
+            if ($found !== null) {
+                if ($parentCategoryId !== null) {
+                    Category::query()->whereKey($found)->update(['parent_id' => $parentCategoryId]);
+                }
+
+                return (int) $found;
+            }
+
+            $foundBySlug = Category::query()->where('slug', $slug)->first();
+            if ($foundBySlug) {
+                if ($parentCategoryId !== null) {
+                    $foundBySlug->update(['parent_id' => $parentCategoryId]);
+                }
+
+                return (int) $foundBySlug->id;
+            }
+        }
+
+        if ($name !== '') {
+            $found = $categoryByName->get($name);
+            if ($found !== null) {
+                if ($parentCategoryId !== null) {
+                    Category::query()->whereKey($found)->update(['parent_id' => $parentCategoryId]);
+                }
+
+                return (int) $found;
+            }
+
+            $foundLower = $categoryByNameLower->get(Str::lower($name));
+            if ($foundLower !== null) {
+                if ($parentCategoryId !== null) {
+                    Category::query()->whereKey($foundLower)->update(['parent_id' => $parentCategoryId]);
+                }
+
+                return (int) $foundLower;
+            }
+
+            $foundByName = Category::query()
+                ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+                ->first();
+            if ($foundByName) {
+                if ($parentCategoryId !== null) {
+                    $foundByName->update(['parent_id' => $parentCategoryId]);
+                }
+
+                return (int) $foundByName->id;
+            }
+        }
+
+        if ($slug === '' && $name === '') {
+            return null;
+        }
+
+        $created = Category::query()->create([
+            'external_id' => null,
+            'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
+            'slug' => $slug !== '' ? $slug : null,
+            'is_active' => true,
+            'parent_id' => $parentCategoryId,
+        ]);
+
+        return (int) $created->id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    protected function resolveCategoryIdFromNestedPayload(array $item): ?int
+    {
+        $category = Arr::get($item, 'category');
+        if (! is_array($category)) {
+            return null;
+        }
+
+        $slug = (string) Arr::get($category, 'slug', '');
+        $name = (string) Arr::get($category, 'name', '');
+
+        if ($slug === '' && $name !== '') {
+            $slug = Str::slug($name);
+        }
+
+        if ($slug !== '') {
+            $foundBySlug = Category::query()->where('slug', $slug)->first();
+            if ($foundBySlug) {
+                return (int) $foundBySlug->id;
+            }
+        }
+
+        if ($name !== '') {
+            $foundByName = Category::query()
+                ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+                ->first();
+            if ($foundByName) {
+                return (int) $foundByName->id;
+            }
+        }
+
+        if ($slug === '' && $name === '') {
+            return null;
+        }
+
+        $created = Category::query()->create([
+            'external_id' => null,
+            'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
+            'slug' => $slug !== '' ? $slug : null,
+            'is_active' => true,
+            'parent_id' => null,
+        ]);
+
+        return (int) $created->id;
+    }
+
+    protected function resolveNumericExternalId(mixed $id): ?int
+    {
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        $numericId = (int) $id;
+
+        return $numericId > 0 ? $numericId : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    protected function resolveExternalRef(array $item, string $fallbackKey): string
+    {
+        $numericId = $this->resolveNumericExternalId(Arr::get($item, 'id'));
+        if ($numericId !== null) {
+            return "id:{$numericId}";
+        }
+
+        return 'h:'.hash('sha256', $fallbackKey);
+    }
+
+    protected function resolveImageExternalRef(string $ownerRef, string $url, int $sortOrder): string
+    {
+        return 'img:'.hash('sha256', "{$ownerRef}|{$sortOrder}|{$url}");
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function normalizeUrlList(mixed $images): array
+    {
+        if (! is_array($images)) {
+            return [];
+        }
+
+        /** @var list<string> $urls */
+        $urls = collect($images)
+            ->filter(fn (mixed $url): bool => is_string($url) && trim($url) !== '')
+            ->map(fn (string $url): string => trim($url))
+            ->values()
+            ->all();
+
+        return $urls;
+    }
+
+    /**
+     * @param  array<string, mixed>  $variant
+     * @return list<string>
+     */
+    protected function normalizeVariantImageList(array $variant): array
+    {
+        $urls = [];
+
+        $primary = Arr::get($variant, 'image');
+        if (is_string($primary) && trim($primary) !== '') {
+            $urls[] = trim($primary);
+        }
+
+        foreach ($this->normalizeUrlList(Arr::get($variant, 'images', [])) as $image) {
+            $urls[] = $image;
+        }
+
+        /** @var list<string> $uniqueUrls */
+        $uniqueUrls = array_values(array_unique($urls));
+
+        return $uniqueUrls;
+    }
+
+    protected function normalizeTimestamp(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse((string) $value)->toDateTimeString();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param  list<int>  $scopedBrandIds
+     * @param  list<string>  $seenProductRefs
+     * @param  list<string>  $seenVariantRefs
+     * @param  list<string>  $seenImageRefs
+     */
+    protected function softDeleteMissingCatalogRecords(
+        array $scopedBrandIds,
+        array $seenProductRefs,
+        array $seenVariantRefs,
+        array $seenImageRefs
+    ): void {
+        if ($scopedBrandIds === []) {
+            return;
+        }
+
+        $scopedProductIds = Product::query()->whereIn('brand_id', $scopedBrandIds)->pluck('id');
+
+        $productQuery = Product::query()
+            ->whereIn('brand_id', $scopedBrandIds)
+            ->whereNull('deleted_at');
+        if ($seenProductRefs !== []) {
+            $productQuery->whereNotIn('external_ref', $seenProductRefs);
+        }
+        $productQuery->update([
+            'deleted_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $variantQuery = ProductVariant::query()
+            ->whereIn('product_id', $scopedProductIds)
+            ->whereNull('deleted_at');
+        if ($seenVariantRefs !== []) {
+            $variantQuery->whereNotIn('external_ref', $seenVariantRefs);
+        }
+        $variantQuery->update([
+            'deleted_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $imageQuery = ProductImage::query()
+            ->whereIn('product_id', $scopedProductIds)
+            ->whereNull('deleted_at');
+        if ($seenImageRefs !== []) {
+            $imageQuery->whereNotIn('external_ref', $seenImageRefs);
+        }
+        $imageQuery->update([
+            'deleted_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    /**
+     * @return array<string, list<int>>
+     */
+    protected function resolveTokenBrandScopes(): array
+    {
+        $scopes = [];
+
+        BrandWhitelist::query()
+            ->where('enabled', true)
+            ->whereNotNull('main_store_token')
+            ->get(['brand_id', 'main_store_token'])
+            ->each(function (BrandWhitelist $whitelist) use (&$scopes): void {
+                $token = trim((string) $whitelist->main_store_token);
+                if ($token === '') {
+                    return;
+                }
+
+                $scopes[$token] ??= [];
+                $scopes[$token][] = (int) $whitelist->brand_id;
+            });
+
+        foreach ($scopes as $token => $brandIds) {
+            $scopes[$token] = array_values(array_unique($brandIds));
+        }
+
+        return $scopes;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function resolveIntegrationTokens(): array
+    {
+        /** @var Collection<int, string> $tokens */
+        $tokens = BrandWhitelist::query()
+            ->where('enabled', true)
+            ->whereNotNull('main_store_token')
+            ->get(['main_store_token'])
+            ->pluck('main_store_token')
+            ->filter(fn (?string $token): bool => $token !== null && trim($token) !== '')
+            ->map(fn (string $token): string => trim($token))
+            ->unique()
+            ->values();
+
+        if ($tokens->isNotEmpty()) {
+            return $tokens->all();
+        }
+
+        $fallbackToken = trim((string) config('services.main_store.token', ''));
+        if ($fallbackToken !== '') {
+            return [$fallbackToken];
+        }
+
+        throw new RuntimeException('No main store token configured. Save a token in Admin > Brands for at least one enabled brand.');
     }
 }
