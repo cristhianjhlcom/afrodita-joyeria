@@ -83,8 +83,8 @@ new class extends Component {
                                 <flux:table.cell variant="strong">{{ $variant->sku ?? $variant->code ?? '-' }}</flux:table.cell>
                                 <flux:table.cell>{{ $variant->color ?? '-' }}</flux:table.cell>
                                 <flux:table.cell>{{ $variant->size ?? '-' }}</flux:table.cell>
-                                <flux:table.cell align="end">{{ $variant->price !== null ? number_format($variant->price) : '-' }}</flux:table.cell>
-                                <flux:table.cell align="end">{{ $variant->sale_price !== null ? number_format($variant->sale_price) : '-' }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ $variant->formattedPrice() }}</flux:table.cell>
+                                <flux:table.cell align="end">{{ $variant->formattedSalePrice() }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ number_format($variant->stock_available ?? 0) }}</flux:table.cell>
                                 <flux:table.cell align="end">{{ number_format($variant->images_count) }}</flux:table.cell>
                             </flux:table.row>

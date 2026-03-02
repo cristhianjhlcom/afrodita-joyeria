@@ -62,4 +62,25 @@ class ProductVariant extends Model
     {
         return $this->hasMany(ProductImage::class);
     }
+
+    public function formattedPrice(?string $currency = null): string
+    {
+        return $this->formatMonetaryAmount($this->price, $currency);
+    }
+
+    public function formattedSalePrice(?string $currency = null): string
+    {
+        return $this->formatMonetaryAmount($this->sale_price, $currency);
+    }
+
+    protected function formatMonetaryAmount(?int $amount, ?string $currency = null): string
+    {
+        if ($amount === null) {
+            return '-';
+        }
+
+        $resolvedCurrency = $currency ?? config('services.main_store.currency', 'COP');
+
+        return money($amount, $resolvedCurrency)->format();
+    }
 }
