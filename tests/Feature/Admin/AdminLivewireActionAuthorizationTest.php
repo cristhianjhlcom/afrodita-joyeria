@@ -10,7 +10,7 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-it('blocks customers from queueing resource sync actions directly via livewire', function () {
+it('blocks customers from queueing products sync actions directly via livewire', function () {
     $customer = User::factory()->create([
         'role' => UserRole::Customer,
     ]);
@@ -18,9 +18,9 @@ it('blocks customers from queueing resource sync actions directly via livewire',
     Artisan::spy();
 
     Livewire::actingAs($customer)
-        ->test('pages::admin.dashboard')
-        ->call('queueResourceSync', 'products')
-        ->assertSet('queuedResource', null);
+        ->test('pages::admin.products')
+        ->call('queueProductsSync')
+        ->assertForbidden();
 
     Artisan::shouldNotHaveReceived('call');
 });

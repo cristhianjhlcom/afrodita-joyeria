@@ -9,7 +9,7 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-it('queues resource sync from admin dashboard actions', function () {
+it('queues full sync from admin dashboard action', function () {
     $admin = User::factory()->create([
         'role' => UserRole::Admin,
     ]);
@@ -17,33 +17,18 @@ it('queues resource sync from admin dashboard actions', function () {
     Artisan::shouldReceive('call')
         ->once()
         ->with('main-store:sync', [
-            'resource' => 'products',
+            'resource' => 'all',
             '--queued' => true,
         ])
         ->andReturn(0);
 
     Livewire::actingAs($admin)
         ->test('pages::admin.dashboard')
-        ->call('queueResourceSync', 'products')
-        ->assertSet('queuedResource', 'products');
+        ->call('queueSync')
+        ->assertSet('syncQueued', true);
 });
 
-it('ignores unsupported resource sync trigger values', function () {
-    $admin = User::factory()->create([
-        'role' => UserRole::Admin,
-    ]);
-
-    Artisan::spy();
-
-    Livewire::actingAs($admin)
-        ->test('pages::admin.dashboard')
-        ->call('queueResourceSync', 'unsupported-resource')
-        ->assertSet('queuedResource', null);
-
-    Artisan::shouldNotHaveReceived('call');
-});
-
-it('shows retry button for failed resource runs', function () {
+it('shows sync monitoring sections without resource control table', function () {
     $admin = User::factory()->create([
         'role' => UserRole::Admin,
     ]);
@@ -55,6 +40,7 @@ it('shows retry button for failed resource runs', function () {
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertSuccessful()
-        ->assertSee('Resource Sync Controls')
-        ->assertSee('Retry Failed');
+        ->assertSee('Recent Sync Runs')
+        ->assertSee('Queue Full Sync')
+        ->assertDontSee('Resource Sync Controls');
 });
