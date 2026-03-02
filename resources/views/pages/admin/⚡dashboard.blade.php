@@ -1,10 +1,5 @@
 <?php
 
-use App\Models\Brand;
-use App\Models\Category;
-use App\Models\Order;
-use App\Models\Product;
-use App\Models\ProductVariant;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\View\View;
@@ -14,32 +9,9 @@ use Livewire\Component;
 new class extends Component {
     public bool $syncQueued = false;
 
-    public ?string $queuedResource = null;
-
     public function rendering(View $view): void
     {
         $view->layout('layouts.admin', ['title' => __('Admin Dashboard')]);
-    }
-
-    #[Computed]
-    public function stats(): array
-    {
-        return [
-            'brands' => Brand::query()->count(),
-            'categories' => Category::query()->count(),
-            'products' => Product::query()->count(),
-            'variants' => ProductVariant::query()->count(),
-            'orders' => Order::query()->count(),
-        ];
-    }
-
-    #[Computed]
-    public function recentSyncRuns()
-    {
-        return SyncRun::query()
-            ->latest('started_at')
-            ->limit(8)
-            ->get();
     }
 
     /**
@@ -58,19 +30,21 @@ new class extends Component {
         ];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected function supportedSyncCommands(): array
+    #[Computed]
+    public function recentSyncRuns()
     {
-        return collect($this->supportedSyncResources())
-            ->pluck('command')
-            ->all();
+        return SyncRun::query()
+            ->latest('started_at')
+            ->limit(8)
+            ->get();
     }
 
     #[Computed]
     public function resourceSyncStatus(): array
     {
+        $thresholdMinutes = (int) config('services.main_store.stale_threshold_minutes', 60);
+        $staleCutoff = now()->subMinutes($thresholdMinutes);
+
         $resourceMap = collect($this->supportedSyncResources());
         $latestRuns = SyncRun::query()
             ->whereIn('resource', $resourceMap->pluck('run_resource')->all())
@@ -80,16 +54,35 @@ new class extends Component {
             ->map(fn ($runs) => $runs->first());
 
         return $resourceMap
-            ->map(function (array $resourceConfig) use ($latestRuns): array {
+            ->map(function (array $resourceConfig) use ($latestRuns, $staleCutoff): array {
                 /** @var SyncRun|null $run */
                 $run = $latestRuns->get($resourceConfig['run_resource']);
 
+                $stateLabel = __('Never Synced');
+                $badgeColor = null;
+
+                if ($run?->status === 'running') {
+                    $stateLabel = __('Running');
+                    $badgeColor = 'blue';
+                } elseif ($run?->status === 'failed') {
+                    $stateLabel = __('Failed');
+                    $badgeColor = 'red';
+                } elseif ($run?->status === 'completed') {
+                    if ($run->checkpoint_updated_since?->lt($staleCutoff) ?? true) {
+                        $stateLabel = __('Stale');
+                        $badgeColor = 'amber';
+                    } else {
+                        $stateLabel = __('Healthy');
+                        $badgeColor = 'green';
+                    }
+                }
+
                 return [
-                    'command' => $resourceConfig['command'],
                     'run_resource' => $resourceConfig['run_resource'],
                     'label' => $resourceConfig['label'],
                     'run' => $run,
-                    'can_retry' => $run?->status === 'failed',
+                    'state_label' => $stateLabel,
+                    'badge_color' => $badgeColor,
                 ];
             })
             ->all();
@@ -98,15 +91,8 @@ new class extends Component {
     #[Computed]
     public function syncHealth(): array
     {
-        $resources = collect([
-            'brands',
-            'categories',
-            'products',
-            'variant-images',
-            'variants',
-            'inventory',
-            'orders',
-        ]);
+        $resources = collect($this->supportedSyncResources())
+            ->pluck('run_resource');
 
         $thresholdMinutes = (int) config('services.main_store.stale_threshold_minutes', 60);
         $staleCutoff = now()->subMinutes($thresholdMinutes);
@@ -129,7 +115,7 @@ new class extends Component {
             ->filter(fn (SyncRun $syncRun): bool => $syncRun->checkpoint_updated_since?->lt($staleCutoff) ?? true)
             ->map(fn (SyncRun $syncRun, string $resource): string => sprintf(
                 '%s (%s)',
-                Str::of($resource)->replace('-', ' ')->headline()->value(),
+                str($resource)->replace('-', ' ')->headline()->value(),
                 optional($syncRun->checkpoint_updated_since)?->diffForHumans() ?? 'never'
             ))
             ->values()
@@ -200,31 +186,11 @@ new class extends Component {
         ]);
 
         $this->syncQueued = true;
-        $this->queuedResource = null;
-    }
-
-    public function queueResourceSync(string $resource): void
-    {
-        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
-
-        if (! in_array($resource, $this->supportedSyncCommands(), true)) {
-            return;
-        }
-
-        Artisan::call('main-store:sync', [
-            'resource' => $resource,
-            '--queued' => true,
-        ]);
-
-        $this->syncQueued = false;
-        $this->queuedResource = $resource;
-        unset($this->resourceSyncStatus);
-        unset($this->recentSyncRuns);
     }
 }; ?>
 
 <section class="w-full">
-    <x-pages::admin.layout :heading="__('Admin Dashboard')" :subheading="__('Monitor sync health and catalog coverage')">
+    <x-pages::admin.layout :heading="__('Admin Dashboard')" :subheading="__('Monitor synchronization health and recent queue activity')">
         <div class="space-y-4">
             @if ($this->failureAlerts['has_alerts'])
                 <flux:callout icon="x-circle" variant="danger" heading="{{ __('Repeated sync failures detected') }}">
@@ -264,37 +230,24 @@ new class extends Component {
             @endif
 
             @if ($syncQueued)
-                <flux:callout icon="check-circle" variant="success" heading="{{ __('Sync queued successfully') }}" />
-            @endif
-            @if ($queuedResource !== null)
-                <flux:callout
-                    icon="check-circle"
-                    variant="success"
-                    :heading="__('Sync queued for :resource', ['resource' => str($queuedResource)->replace('-', ' ')->headline()->value()])"
-                />
+                <flux:callout icon="check-circle" variant="success" heading="{{ __('Full sync queued successfully') }}" />
             @endif
 
-            <div class="grid gap-3 md:grid-cols-5">
-                <flux:card>
-                    <flux:heading size="sm">{{ __('Brands') }}</flux:heading>
-                    <flux:text class="mt-1 text-xl font-semibold">{{ number_format($this->stats['brands']) }}</flux:text>
-                </flux:card>
-                <flux:card>
-                    <flux:heading size="sm">{{ __('Categories') }}</flux:heading>
-                    <flux:text class="mt-1 text-xl font-semibold">{{ number_format($this->stats['categories']) }}</flux:text>
-                </flux:card>
-                <flux:card>
-                    <flux:heading size="sm">{{ __('Products') }}</flux:heading>
-                    <flux:text class="mt-1 text-xl font-semibold">{{ number_format($this->stats['products']) }}</flux:text>
-                </flux:card>
-                <flux:card>
-                    <flux:heading size="sm">{{ __('Variants') }}</flux:heading>
-                    <flux:text class="mt-1 text-xl font-semibold">{{ number_format($this->stats['variants']) }}</flux:text>
-                </flux:card>
-                <flux:card>
-                    <flux:heading size="sm">{{ __('Orders Mirror') }}</flux:heading>
-                    <flux:text class="mt-1 text-xl font-semibold">{{ number_format($this->stats['orders']) }}</flux:text>
-                </flux:card>
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                @foreach ($this->resourceSyncStatus as $resourceStatus)
+                    <flux:card :key="$resourceStatus['run_resource']" class="space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <flux:heading size="sm">{{ __($resourceStatus['label']) }}</flux:heading>
+                            <flux:badge :color="$resourceStatus['badge_color']">{{ $resourceStatus['state_label'] }}</flux:badge>
+                        </div>
+                        <flux:text size="sm" class="text-zinc-600">
+                            {{ __('Last checkpoint: :value', ['value' => optional($resourceStatus['run']?->checkpoint_updated_since)?->diffForHumans() ?? __('Never')]) }}
+                        </flux:text>
+                        <flux:text size="sm" class="text-zinc-600">
+                            {{ __('Errors: :count', ['count' => number_format($resourceStatus['run']?->errors_count ?? 0)]) }}
+                        </flux:text>
+                    </flux:card>
+                @endforeach
             </div>
 
             <div class="flex items-center justify-between gap-3">
@@ -318,7 +271,17 @@ new class extends Component {
                     @forelse ($this->recentSyncRuns as $syncRun)
                         <flux:table.row :key="$syncRun->id">
                             <flux:table.cell variant="strong">{{ str($syncRun->resource)->headline() }}</flux:table.cell>
-                            <flux:table.cell>{{ str($syncRun->status)->headline() }}</flux:table.cell>
+                            <flux:table.cell>
+                                @if ($syncRun->status === 'completed')
+                                    <flux:badge color="green">{{ __('Completed') }}</flux:badge>
+                                @elseif ($syncRun->status === 'failed')
+                                    <flux:badge color="red">{{ __('Failed') }}</flux:badge>
+                                @elseif ($syncRun->status === 'running')
+                                    <flux:badge color="blue">{{ __('Running') }}</flux:badge>
+                                @else
+                                    <flux:badge>{{ str($syncRun->status)->headline() }}</flux:badge>
+                                @endif
+                            </flux:table.cell>
                             <flux:table.cell>{{ optional($syncRun->started_at)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
                             <flux:table.cell>{{ optional($syncRun->finished_at)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
                             <flux:table.cell align="end">{{ number_format($syncRun->records_processed) }}</flux:table.cell>
@@ -335,52 +298,6 @@ new class extends Component {
                     @endforelse
                 </flux:table.rows>
             </flux:table>
-
-            <div class="space-y-2">
-                <flux:subheading>{{ __('Resource Sync Controls') }}</flux:subheading>
-
-                <flux:table>
-                    <flux:table.columns>
-                        <flux:table.column>{{ __('Resource') }}</flux:table.column>
-                        <flux:table.column>{{ __('Last Status') }}</flux:table.column>
-                        <flux:table.column>{{ __('Last Checkpoint') }}</flux:table.column>
-                        <flux:table.column align="end">{{ __('Errors') }}</flux:table.column>
-                        <flux:table.column align="end">{{ __('Actions') }}</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @foreach ($this->resourceSyncStatus as $resourceStatus)
-                            <flux:table.row :key="$resourceStatus['command']">
-                                <flux:table.cell variant="strong">{{ $resourceStatus['label'] }}</flux:table.cell>
-                                <flux:table.cell>{{ str($resourceStatus['run']?->status ?? 'never')->headline() }}</flux:table.cell>
-                                <flux:table.cell>{{ optional($resourceStatus['run']?->checkpoint_updated_since)?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
-                                <flux:table.cell align="end">{{ number_format($resourceStatus['run']?->errors_count ?? 0) }}</flux:table.cell>
-                                <flux:table.cell align="end">
-                                    <div class="flex justify-end gap-2">
-                                        <flux:button
-                                            size="sm"
-                                            variant="ghost"
-                                            wire:click="queueResourceSync('{{ $resourceStatus['command'] }}')"
-                                            wire:loading.attr="disabled"
-                                        >
-                                            {{ __('Queue') }}
-                                        </flux:button>
-                                        @if ($resourceStatus['can_retry'])
-                                            <flux:button
-                                                size="sm"
-                                                variant="primary"
-                                                wire:click="queueResourceSync('{{ $resourceStatus['command'] }}')"
-                                                wire:loading.attr="disabled"
-                                            >
-                                                {{ __('Retry Failed') }}
-                                            </flux:button>
-                                        @endif
-                                    </div>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforeach
-                    </flux:table.rows>
-                </flux:table>
-            </div>
         </div>
     </x-pages::admin.layout>
 </section>
