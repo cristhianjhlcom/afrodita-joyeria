@@ -2,10 +2,13 @@
 
 use App\Models\Brand;
 use App\Models\BrandWhitelist;
+use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
@@ -15,8 +18,24 @@ beforeEach(function () {
     config()->set('services.main_store.token', 'test-token');
 });
 
+it('fails early when main store base url is missing', function () {
+    config()->set('services.main_store.base_url', '');
+
+    $this->artisan('main-store:sync', ['resource' => 'all', '--queued' => true])
+        ->assertFailed();
+});
+
+it('fails early when no token exists in enabled brand integrations and fallback token is missing', function () {
+    config()->set('services.main_store.token', '');
+    BrandWhitelist::query()->delete();
+
+    $this->artisan('main-store:sync', ['resource' => 'brands'])
+        ->assertFailed();
+});
+
 it('syncs catalog resources from main store', function () {
     Http::fake([
+        'https://main-store.test/api/v1/sync/brand?*' => Http::response([], 404),
         'https://main-store.test/api/v1/sync/brands*' => Http::response([
             'data' => [
                 [
@@ -62,6 +81,7 @@ it('syncs catalog resources from main store', function () {
             ],
             'meta' => ['next_cursor' => null],
         ]),
+        'https://main-store.test/api/v1/sync/subcategories?*' => Http::response([], 404),
         'https://main-store.test/api/v1/sync/products*' => Http::response([
             'data' => [
                 [
@@ -94,6 +114,7 @@ it('syncs catalog resources from main store', function () {
             ],
             'meta' => ['next_cursor' => null],
         ]),
+        'https://main-store.test/api/v1/sync/stocks?*' => Http::response([], 404),
         'https://main-store.test/api/v1/sync/inventory*' => Http::response([
             'data' => [
                 [
@@ -171,4 +192,442 @@ it('syncs mirrored orders from main store', function () {
 
     expect($order->items)->toHaveCount(1);
     expect($order->items->first()->sku)->toBe('SKU-0001');
+    expect($order->getRawOriginal('updated_at'))->toContain(' ');
+    expect($order->getRawOriginal('updated_at'))->not->toContain('T');
+});
+
+it('supports endpoint aliases for brand and stock sync resources', function () {
+    Http::fake([
+        'https://main-store.test/api/v1/sync/brand*' => Http::response([
+            'data' => [
+                'id' => 11,
+                'name' => 'Alias Brand',
+                'slug' => 'alias-brand',
+                'is_active' => true,
+                'updated_at' => now()->toIso8601String(),
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/stocks*' => Http::response([
+            'data' => [
+                [
+                    'variant_id' => 702,
+                    'stock_on_hand' => 9,
+                    'stock_reserved' => 2,
+                    'stock_available' => 7,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    Product::factory()->create([
+        'external_id' => 601,
+    ]);
+
+    ProductVariant::factory()->create([
+        'external_id' => 702,
+        'product_id' => Product::query()->firstOrFail()->id,
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'brands'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'inventory'])->assertSuccessful();
+
+    Http::assertSent(fn (Request $request): bool => str($request->url())->contains('/api/v1/sync/brand'));
+    Http::assertSent(fn (Request $request): bool => str($request->url())->contains('/api/v1/sync/stocks'));
+
+    expect(Brand::query()->where('external_id', 11)->exists())->toBeTrue();
+    expect(ProductVariant::query()->where('external_id', 702)->where('stock_available', 7)->exists())->toBeTrue();
+});
+
+it('does not fail image sync when variant-images endpoint is missing', function () {
+    Http::fake([
+        'https://main-store.test/api/v1/sync/variant-images*' => Http::response([], 404),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'images'])->assertSuccessful();
+});
+
+it('syncs subcategories endpoint into category parent relations', function () {
+    Http::fake([
+        'https://main-store.test/api/v1/sync/categories*' => Http::response([
+            'data' => [
+                [
+                    'id' => 300,
+                    'name' => 'Bracelets',
+                    'slug' => 'bracelets',
+                    'is_active' => true,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/subcategories*' => Http::response([
+            'data' => [
+                [
+                    'id' => 301,
+                    'category_id' => 300,
+                    'name' => 'Charm Bracelets',
+                    'slug' => 'charm-bracelets',
+                    'is_active' => true,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'categories'])->assertSuccessful();
+
+    $parent = Category::query()->where('external_id', 300)->firstOrFail();
+    $child = Category::query()->where('external_id', 301)->firstOrFail();
+
+    expect($child->parent_id)->toBe($parent->id);
+});
+
+it('uses brand integration token when syncing resources', function () {
+    config()->set('services.main_store.token', 'global-fallback-token');
+
+    $brand = Brand::factory()->create([
+        'external_id' => 10,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|brand-integration-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    Http::assertSent(function (Request $request): bool {
+        return $request->url() === 'https://main-store.test/api/v1/sync/products?per_page=100'
+            && $request->hasHeader('Authorization', 'Bearer 1|brand-integration-token');
+    });
+});
+
+it('syncs products from nested external payload without numeric ids', function () {
+    $brand = Brand::factory()->create([
+        'external_id' => 6,
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    $category = Category::factory()->create([
+        'external_id' => 100,
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+        'parent_id' => null,
+    ]);
+
+    Category::factory()->create([
+        'external_id' => 101,
+        'name' => 'Anillos con Figuras',
+        'slug' => 'anillos-con-figuras',
+        'parent_id' => $category->id,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [
+                [
+                    'name' => 'Prueba 02',
+                    'slug' => 'producto-de-prueba-02',
+                    'description' => '<p>Demo</p>',
+                    'status' => 'draft',
+                    'brand' => [
+                        'name' => 'AFRODITA',
+                    ],
+                    'category' => [
+                        'name' => 'Anillos',
+                    ],
+                    'subcategory' => [
+                        'name' => 'ANILLOS CON FIGURAS',
+                    ],
+                    'variants' => [
+                        [
+                            'sku' => 'TEST003',
+                            'price' => 2990,
+                            'sale_price' => 16999,
+                            'color' => 'Rubi',
+                            'hex' => '#e0115f',
+                            'size' => '8',
+                            'stock' => 15,
+                            'in_stock' => true,
+                        ],
+                    ],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    $product = Product::query()->where('slug', 'producto-de-prueba-02')->firstOrFail();
+    $variant = ProductVariant::query()->where('sku', 'TEST003')->firstOrFail();
+
+    expect($product->brand_id)->toBe($brand->id);
+    expect($variant->product_id)->toBe($product->id);
+    expect($variant->stock_available)->toBe(15);
+});
+
+it('stores payload order url and normalized product and variant images', function () {
+    $brand = Brand::factory()->create([
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    $category = Category::factory()->create([
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+    ]);
+
+    Category::factory()->create([
+        'name' => 'Anillos con Figuras',
+        'slug' => 'anillos-con-figuras',
+        'parent_id' => $category->id,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [[
+                'name' => 'Prueba 02',
+                'slug' => 'producto-de-prueba-02',
+                'description' => '<p>Demo</p>',
+                'status' => 'draft',
+                'order' => 7,
+                'url' => 'http://localhost:8000/anillos/anillos-con-figuras/producto-de-prueba-02',
+                'images' => [
+                    'http://localhost:8000/storage/public/products/p-1.webp',
+                    'http://localhost:8000/storage/public/products/p-2.webp',
+                ],
+                'brand' => ['name' => 'Afrodita'],
+                'category' => ['name' => 'Anillos'],
+                'subcategory' => ['name' => 'Anillos con Figuras'],
+                'variants' => [[
+                    'sku' => 'TEST003',
+                    'price' => 2990,
+                    'sale_price' => 16999,
+                    'color' => 'Rubi',
+                    'hex' => '#e0115f',
+                    'size' => '8',
+                    'image' => 'http://localhost:8000/storage/public/variants/v-1.webp',
+                    'images' => [
+                        'http://localhost:8000/storage/public/variants/v-1.webp',
+                        'http://localhost:8000/storage/public/products/p-1.webp',
+                    ],
+                    'stock' => 15,
+                    'in_stock' => true,
+                ]],
+                'updated_at' => now()->toIso8601String(),
+            ]],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    $product = Product::query()->where('slug', 'producto-de-prueba-02')->firstOrFail();
+    $variant = ProductVariant::query()->where('sku', 'TEST003')->firstOrFail();
+
+    expect($product->sort_order)->toBe(7);
+    expect($product->url)->toContain('/producto-de-prueba-02');
+    expect($variant->primary_image_url)->toContain('/variants/v-1.webp');
+    expect(ProductImage::query()->where('product_id', $product->id)->count())->toBe(4);
+    expect(ProductImage::query()->where('product_variant_id', $variant->id)->exists())->toBeTrue();
+});
+
+it('soft deletes missing products for the token scoped brand', function () {
+    $brand = Brand::factory()->create([
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    $category = Category::factory()->create([
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+    ]);
+
+    Category::factory()->create([
+        'name' => 'Anillos con Figuras',
+        'slug' => 'anillos-con-figuras',
+        'parent_id' => $category->id,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::sequence()
+            ->push([
+                'data' => [[
+                    'name' => 'Producto Activo',
+                    'slug' => 'producto-activo',
+                    'status' => 'published',
+                    'brand' => ['name' => 'Afrodita'],
+                    'category' => ['name' => 'Anillos'],
+                    'subcategory' => ['name' => 'Anillos con Figuras'],
+                    'variants' => [],
+                    'updated_at' => now()->toIso8601String(),
+                ]],
+                'meta' => ['next_cursor' => null],
+            ])
+            ->push([
+                'data' => [],
+                'meta' => ['next_cursor' => null],
+            ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    expect(Product::query()->withTrashed()->where('slug', 'producto-activo')->firstOrFail()->trashed())->toBeTrue();
+});
+
+it('does not duplicate subcategory creation when same slug appears in one products payload', function () {
+    $brand = Brand::factory()->create([
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    Category::factory()->create([
+        'name' => 'Accesorios',
+        'slug' => 'accesorios',
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [
+                [
+                    'name' => 'P1',
+                    'slug' => 'p1',
+                    'status' => 'published',
+                    'brand' => ['name' => 'Afrodita'],
+                    'category' => ['name' => 'Accesorios'],
+                    'subcategory' => ['name' => 'Accesorios para el Cabello'],
+                    'variants' => [],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+                [
+                    'name' => 'P2',
+                    'slug' => 'p2',
+                    'status' => 'published',
+                    'brand' => ['name' => 'Afrodita'],
+                    'category' => ['name' => 'Accesorios'],
+                    'subcategory' => ['name' => 'Accesorios para el Cabello'],
+                    'variants' => [],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    expect(Category::query()->where('slug', 'accesorios-para-el-cabello')->count())->toBe(1);
+});
+
+it('does not soft delete products from earlier pages in the same sync run', function () {
+    $brand = Brand::factory()->create([
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    $category = Category::factory()->create([
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+    ]);
+
+    Category::factory()->create([
+        'name' => 'Anillos con Figuras',
+        'slug' => 'anillos-con-figuras',
+        'parent_id' => $category->id,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::sequence()
+            ->push([
+                'data' => [
+                    [
+                        'name' => 'P1',
+                        'slug' => 'p1',
+                        'status' => 'published',
+                        'brand' => ['name' => 'Afrodita'],
+                        'category' => ['name' => 'Anillos'],
+                        'subcategory' => ['name' => 'Anillos con Figuras'],
+                        'variants' => [],
+                        'updated_at' => now()->toIso8601String(),
+                    ],
+                    [
+                        'name' => 'P2',
+                        'slug' => 'p2',
+                        'status' => 'published',
+                        'brand' => ['name' => 'Afrodita'],
+                        'category' => ['name' => 'Anillos'],
+                        'subcategory' => ['name' => 'Anillos con Figuras'],
+                        'variants' => [],
+                        'updated_at' => now()->toIso8601String(),
+                    ],
+                ],
+                'meta' => ['next_cursor' => 'cursor-2'],
+            ])
+            ->push([
+                'data' => [
+                    [
+                        'name' => 'P3',
+                        'slug' => 'p3',
+                        'status' => 'published',
+                        'brand' => ['name' => 'Afrodita'],
+                        'category' => ['name' => 'Anillos'],
+                        'subcategory' => ['name' => 'Anillos con Figuras'],
+                        'variants' => [],
+                        'updated_at' => now()->toIso8601String(),
+                    ],
+                ],
+                'meta' => ['next_cursor' => null],
+            ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    expect(Product::query()->count())->toBe(3);
+    expect(Product::query()->whereNotNull('deleted_at')->count())->toBe(0);
 });
