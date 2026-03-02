@@ -2,6 +2,8 @@
 
 use App\Models\Brand;
 use App\Models\BrandWhitelist;
+use App\Models\SyncRun;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
@@ -32,13 +34,15 @@ new class extends Component {
 
     public string $newBrandToken = '';
 
+    public bool $syncQueued = false;
+
+    #[Url(as: 'q')]
+    public string $search = '';
+
     public function rendering(View $view): void
     {
         $view->layout('layouts.admin', ['title' => __('Admin Brands')]);
     }
-
-    #[Url(as: 'q')]
-    public string $search = '';
 
     public function updatedSearch(): void
     {
@@ -53,6 +57,62 @@ new class extends Component {
             ->when($this->search !== '', fn ($query) => $query->where('name', 'like', "%{$this->search}%"))
             ->orderBy('name')
             ->paginate(12);
+    }
+
+    #[Computed]
+    public function syncStatus(): array
+    {
+        $thresholdMinutes = (int) config('services.main_store.stale_threshold_minutes', 60);
+        $staleCutoff = now()->subMinutes($thresholdMinutes);
+
+        $latestRun = SyncRun::query()
+            ->where('resource', 'brands')
+            ->latest('started_at')
+            ->first();
+
+        $latestSuccessfulRun = SyncRun::query()
+            ->where('resource', 'brands')
+            ->where('status', 'completed')
+            ->whereNotNull('checkpoint_updated_since')
+            ->latest('checkpoint_updated_since')
+            ->first();
+
+        $stateLabel = __('Never Synced');
+        $badgeColor = null;
+
+        if ($latestRun?->status === 'running') {
+            $stateLabel = __('Running');
+            $badgeColor = 'blue';
+        } elseif ($latestRun?->status === 'failed') {
+            $stateLabel = __('Failed');
+            $badgeColor = 'red';
+        } elseif ($latestSuccessfulRun?->checkpoint_updated_since?->lt($staleCutoff) ?? true) {
+            $stateLabel = __('Stale');
+            $badgeColor = 'amber';
+        } elseif ($latestSuccessfulRun !== null) {
+            $stateLabel = __('Healthy');
+            $badgeColor = 'green';
+        }
+
+        return [
+            'state_label' => $stateLabel,
+            'badge_color' => $badgeColor,
+            'last_synced_at' => $latestSuccessfulRun?->checkpoint_updated_since,
+            'error_count' => $latestRun?->errors_count ?? 0,
+        ];
+    }
+
+    public function queueBrandsSync(): void
+    {
+        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
+
+        Artisan::call('main-store:sync', [
+            'resource' => 'brands',
+            '--queued' => true,
+        ]);
+
+        $this->syncQueued = true;
+        unset($this->syncStatus);
     }
 
     public function openCreateIntegrationModal(): void
@@ -178,7 +238,7 @@ new class extends Component {
 }; ?>
 
 <section class="w-full">
-    <x-pages::admin.layout :heading="__('Brands')" :subheading="__('Whitelist brands and configure per-brand integration tokens for main store sync')">
+    <x-pages::admin.layout :heading="__('Brands')" :subheading="__('Whitelist brands, configure integrations, and monitor sync readiness')">
         <div class="space-y-4">
             @if ($integrationSavedFor !== null)
                 <flux:callout
@@ -188,15 +248,36 @@ new class extends Component {
                 />
             @endif
 
+            @if ($syncQueued)
+                <flux:callout icon="check-circle" variant="success" heading="{{ __('Brands sync queued successfully') }}" />
+            @endif
+
             @error('integration')
                 <flux:callout icon="x-circle" variant="danger" :heading="$message" />
             @enderror
 
-            <div class="flex items-end justify-between gap-3">
+            <flux:card class="space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <flux:heading size="sm">{{ __('Brands Sync Status') }}</flux:heading>
+                    <flux:badge :color="$this->syncStatus['badge_color']">{{ $this->syncStatus['state_label'] }}</flux:badge>
+                </div>
+                <div class="flex flex-wrap gap-4 text-sm text-zinc-600">
+                    <span>{{ __('Last synced: :value', ['value' => optional($this->syncStatus['last_synced_at'])?->diffForHumans() ?? __('Never')]) }}</span>
+                    <span>{{ __('Errors: :count', ['count' => number_format($this->syncStatus['error_count'])]) }}</span>
+                </div>
+            </flux:card>
+
+            <div class="flex flex-wrap items-end justify-between gap-3">
                 <flux:input wire:model.live.debounce.300ms="search" :label="__('Search brand')" placeholder="{{ __('Type a brand name...') }}" />
-                <flux:button variant="primary" wire:click="openCreateIntegrationModal" wire:loading.attr="disabled">
-                    {{ __('New Integration') }}
-                </flux:button>
+                <div class="flex gap-2">
+                    <flux:button variant="primary" wire:click="queueBrandsSync" wire:loading.attr="disabled">
+                        <span wire:loading.remove wire:target="queueBrandsSync">{{ __('Queue Sync') }}</span>
+                        <span wire:loading wire:target="queueBrandsSync">{{ __('Queuing...') }}</span>
+                    </flux:button>
+                    <flux:button variant="primary" wire:click="openCreateIntegrationModal" wire:loading.attr="disabled">
+                        {{ __('New Integration') }}
+                    </flux:button>
+                </div>
             </div>
 
             <flux:text class="text-sm text-zinc-600">
@@ -208,8 +289,11 @@ new class extends Component {
                     <flux:table.column>{{ __('Name') }}</flux:table.column>
                     <flux:table.column>{{ __('Slug') }}</flux:table.column>
                     <flux:table.column>{{ __('Main Store ID') }}</flux:table.column>
+                    <flux:table.column>{{ __('Brand State') }}</flux:table.column>
                     <flux:table.column>{{ __('Integration') }}</flux:table.column>
                     <flux:table.column>{{ __('Whitelisted') }}</flux:table.column>
+                    <flux:table.column>{{ __('Sync Status') }}</flux:table.column>
+                    <flux:table.column>{{ __('Last Synced') }}</flux:table.column>
                     <flux:table.column align="end">{{ __('Action') }}</flux:table.column>
                 </flux:table.columns>
 
@@ -219,6 +303,13 @@ new class extends Component {
                             <flux:table.cell variant="strong">{{ $brand->name }}</flux:table.cell>
                             <flux:table.cell>{{ $brand->slug ?? '-' }}</flux:table.cell>
                             <flux:table.cell>{{ $brand->external_id ?? '-' }}</flux:table.cell>
+                            <flux:table.cell>
+                                @if ($brand->is_active)
+                                    <flux:badge color="green">{{ __('Active') }}</flux:badge>
+                                @else
+                                    <flux:badge color="amber">{{ __('Inactive') }}</flux:badge>
+                                @endif
+                            </flux:table.cell>
                             <flux:table.cell>
                                 @if (filled($brand->whitelist?->main_store_token))
                                     <flux:badge color="green">{{ __('Configured') }}</flux:badge>
@@ -233,6 +324,10 @@ new class extends Component {
                                     <flux:badge>{{ __('No') }}</flux:badge>
                                 @endif
                             </flux:table.cell>
+                            <flux:table.cell>
+                                <flux:badge :color="$this->syncStatus['badge_color']">{{ $this->syncStatus['state_label'] }}</flux:badge>
+                            </flux:table.cell>
+                            <flux:table.cell>{{ optional($this->syncStatus['last_synced_at'])?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
                             <flux:table.cell align="end">
                                 <div class="flex justify-end gap-2">
                                     <flux:button size="sm" variant="ghost" wire:click="openEditIntegrationModal({{ $brand->id }})" wire:loading.attr="disabled">
@@ -246,7 +341,7 @@ new class extends Component {
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6">{{ __('No brands found.') }}</flux:table.cell>
+                            <flux:table.cell colspan="9">{{ __('No brands found for the selected filters.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>
