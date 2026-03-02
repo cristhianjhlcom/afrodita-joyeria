@@ -27,6 +27,11 @@ new class extends Component {
             ['command' => 'images', 'run_resource' => 'variant-images', 'label' => 'Variant Images'],
             ['command' => 'inventory', 'run_resource' => 'inventory', 'label' => 'Inventory'],
             ['command' => 'orders', 'run_resource' => 'orders', 'label' => 'Orders'],
+            ['command' => 'countries', 'run_resource' => 'countries', 'label' => 'Countries'],
+            ['command' => 'departments', 'run_resource' => 'departments', 'label' => 'Departments'],
+            ['command' => 'provinces', 'run_resource' => 'provinces', 'label' => 'Provinces'],
+            ['command' => 'districts', 'run_resource' => 'districts', 'label' => 'Districts'],
+            ['command' => 'addresses', 'run_resource' => 'addresses', 'label' => 'Addresses'],
         ];
     }
 

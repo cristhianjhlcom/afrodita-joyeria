@@ -2,9 +2,13 @@
 
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Country;
+use App\Models\Department;
+use App\Models\District;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Province;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Route;
 
@@ -37,6 +41,21 @@ Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
         Route::livewire('orders', 'pages::admin.orders')
             ->can('viewAny', Order::class)
             ->name('orders');
+        Route::livewire('countries', 'pages::admin.countries')
+            ->can('viewAny', Country::class)
+            ->name('countries');
+        Route::livewire('departments', 'pages::admin.departments')
+            ->can('viewAny', Department::class)
+            ->name('departments');
+        Route::livewire('provinces', 'pages::admin.provinces')
+            ->can('viewAny', Province::class)
+            ->name('provinces');
+        Route::livewire('districts', 'pages::admin.districts')
+            ->can('viewAny', District::class)
+            ->name('districts');
+        Route::livewire('addresses', 'pages::admin.addresses')
+            ->can('viewAny', District::class)
+            ->name('addresses');
         Route::livewire('sync-runs/{syncRun}', 'pages::admin.sync-run-detail')
             ->can('view', 'syncRun')
             ->name('sync-runs.show');

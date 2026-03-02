@@ -37,6 +37,24 @@
                         {{ __('Orders Mirror') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>
+
+                <flux:sidebar.group :heading="__('Addresses')" class="grid">
+                    <flux:sidebar.item icon="map" :href="route('admin.addresses')" :current="request()->routeIs('admin.addresses')" wire:navigate>
+                        {{ __('Addresses') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="globe-americas" :href="route('admin.countries')" :current="request()->routeIs('admin.countries')" wire:navigate>
+                        {{ __('Countries') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="map-pin" :href="route('admin.departments')" :current="request()->routeIs('admin.departments')" wire:navigate>
+                        {{ __('Departments') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="rectangle-group" :href="route('admin.provinces')" :current="request()->routeIs('admin.provinces')" wire:navigate>
+                        {{ __('Provinces') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="squares-plus" :href="route('admin.districts')" :current="request()->routeIs('admin.districts')" wire:navigate>
+                        {{ __('Districts') }}
+                    </flux:sidebar.item>
+                </flux:sidebar.group>
             </flux:sidebar.nav>
 
             <flux:spacer />
