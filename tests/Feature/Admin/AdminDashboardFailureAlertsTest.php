@@ -30,7 +30,7 @@ it('shows repeated failure alert when threshold is reached', function () {
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertSuccessful()
-        ->assertSee('Repeated sync failures detected')
+        ->assertSee('Fallos de sincronizacion repetidos detectados')
         ->assertSee('Products (3)');
 });
 

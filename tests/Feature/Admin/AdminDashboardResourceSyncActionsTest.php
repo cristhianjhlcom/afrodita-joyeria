@@ -40,7 +40,7 @@ it('shows sync monitoring sections without resource control table', function () 
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertSuccessful()
-        ->assertSee('Recent Sync Runs')
-        ->assertSee('Queue Full Sync')
+        ->assertSee('Sincronizaciones recientes')
+        ->assertSee('Encolar sincronizacion completa')
         ->assertDontSee('Resource Sync Controls');
 });

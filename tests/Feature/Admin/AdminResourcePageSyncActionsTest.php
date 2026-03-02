@@ -99,8 +99,8 @@ it('shows products table with avatar and sync metadata', function () {
     $this->actingAs($admin)
         ->get(route('admin.products'))
         ->assertSuccessful()
-        ->assertSee('Queue Sync')
-        ->assertSee('Last Synced')
-        ->assertSee('Healthy')
+        ->assertSee('Encolar sincronizacion')
+        ->assertSee('Ultima sincronizacion')
+        ->assertSee('Saludable')
         ->assertSee('https://cdn.example.com/ariel-ring-table.jpg');
 });

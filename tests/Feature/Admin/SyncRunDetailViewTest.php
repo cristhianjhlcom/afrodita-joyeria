@@ -25,7 +25,7 @@ it('renders sync run details and error payload for admin users', function () {
     $this->actingAs($admin)
         ->get(route('admin.sync-runs.show', $syncRun))
         ->assertSuccessful()
-        ->assertSee('Sync Run #'.$syncRun->id)
+        ->assertSee('Ejecucion de sincronizacion #'.$syncRun->id)
         ->assertSee('Products')
         ->assertSee('API request failed with timeout.')
         ->assertSee('First batch timed out.')

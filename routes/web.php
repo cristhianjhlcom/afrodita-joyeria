@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'home')->name('home');
 
-Route::middleware(['auth', 'verified', 'admin'])
+Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function (): void {

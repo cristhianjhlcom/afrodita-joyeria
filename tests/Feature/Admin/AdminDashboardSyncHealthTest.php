@@ -22,8 +22,8 @@ it('shows stale sync warning when required resources are missing successful sync
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertSuccessful()
-        ->assertSee('Sync data is stale')
-        ->assertSee('Missing successful runs');
+        ->assertSee('Los datos de sincronizacion estan desactualizados')
+        ->assertSee('Ejecuciones exitosas faltantes');
 });
 
 it('shows healthy sync status when all resources are fresh', function () {
@@ -43,6 +43,6 @@ it('shows healthy sync status when all resources are fresh', function () {
     $this->actingAs($admin)
         ->get(route('admin.dashboard'))
         ->assertSuccessful()
-        ->assertSee('Sync data is healthy')
-        ->assertDontSee('Sync data is stale');
+        ->assertSee('Los datos de sincronizacion estan saludables')
+        ->assertDontSee('Los datos de sincronizacion estan desactualizados');
 });
