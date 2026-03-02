@@ -5,11 +5,15 @@ namespace App\Services\MainStore;
 use App\Models\Brand;
 use App\Models\BrandWhitelist;
 use App\Models\Category;
+use App\Models\Country;
+use App\Models\Department;
+use App\Models\District;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Models\Province;
 use App\Models\SyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -564,6 +568,654 @@ class MainStoreSyncService
         });
     }
 
+    public function syncCountries(): int
+    {
+        return $this->syncResource('countries', function (array $items): int {
+            $rows = collect($items)
+                ->map(function (array $item): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'name' => (string) ($item['name'] ?? ''),
+                        'iso_code_2' => Arr::get($item, 'iso_code_2'),
+                        'iso_code_3' => Arr::get($item, 'iso_code_3'),
+                        'is_active' => (bool) ($item['is_active'] ?? true),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($rows->isEmpty()) {
+                return 0;
+            }
+
+            Country::query()->upsert(
+                $rows->all(),
+                ['external_id'],
+                ['name', 'iso_code_2', 'iso_code_3', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            return $rows->count();
+        });
+    }
+
+    public function syncDepartments(): int
+    {
+        return $this->syncResource('departments', function (array $items): int {
+            $countryRows = collect($items)
+                ->map(function (array $item): ?array {
+                    $country = Arr::get($item, 'country');
+                    if (! is_array($country)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($country['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'name' => (string) ($country['name'] ?? ''),
+                        'iso_code_2' => Arr::get($country, 'iso_code_2'),
+                        'iso_code_3' => Arr::get($country, 'iso_code_3'),
+                        'is_active' => true,
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($countryRows->isNotEmpty()) {
+                Country::query()->upsert(
+                    $countryRows->all(),
+                    ['external_id'],
+                    ['name', 'iso_code_2', 'iso_code_3', 'is_active', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $countryMap = Country::query()->pluck('id', 'external_id');
+
+            $rows = collect($items)
+                ->map(function (array $item) use ($countryMap): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId($item['country_id'] ?? Arr::get($item, 'country.id'));
+
+                    if ($externalId === null || $countryExternalId === null) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    if ($countryId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'name' => (string) ($item['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($item, 'ubigeo_code'),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($rows->isEmpty()) {
+                return 0;
+            }
+
+            Department::query()->upsert(
+                $rows->all(),
+                ['external_id'],
+                ['country_id', 'name', 'ubigeo_code', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            return $rows->count();
+        });
+    }
+
+    public function syncProvinces(): int
+    {
+        return $this->syncResource('provinces', function (array $items): int {
+            $countryRows = collect($items)
+                ->map(function (array $item): ?array {
+                    $country = Arr::get($item, 'country');
+                    if (! is_array($country)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($country['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'name' => (string) ($country['name'] ?? ''),
+                        'iso_code_2' => Arr::get($country, 'iso_code_2'),
+                        'iso_code_3' => Arr::get($country, 'iso_code_3'),
+                        'is_active' => true,
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($countryRows->isNotEmpty()) {
+                Country::query()->upsert(
+                    $countryRows->all(),
+                    ['external_id'],
+                    ['name', 'iso_code_2', 'iso_code_3', 'is_active', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $countryMap = Country::query()->pluck('id', 'external_id');
+
+            $departmentRows = collect($items)
+                ->map(function (array $item) use ($countryMap): ?array {
+                    $department = Arr::get($item, 'department');
+                    if (! is_array($department)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($department['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId(
+                        $department['country_id'] ?? Arr::get($item, 'country_id') ?? Arr::get($item, 'country.id')
+                    );
+
+                    if ($externalId === null || $countryExternalId === null) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    if ($countryId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'name' => (string) ($department['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($department, 'ubigeo_code'),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($departmentRows->isNotEmpty()) {
+                Department::query()->upsert(
+                    $departmentRows->all(),
+                    ['external_id'],
+                    ['country_id', 'name', 'ubigeo_code', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $departmentMap = Department::query()->pluck('id', 'external_id');
+
+            $rows = collect($items)
+                ->map(function (array $item) use ($departmentMap, $countryMap): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId(
+                        Arr::get($item, 'country.id') ?? Arr::get($item, 'country_id') ?? Arr::get($item, 'department.country_id')
+                    );
+                    $departmentExternalId = $this->resolveNumericExternalId($item['department_id'] ?? Arr::get($item, 'department.id'));
+
+                    if ($externalId === null || $countryExternalId === null || $departmentExternalId === null) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    $departmentId = $departmentMap->get($departmentExternalId);
+                    if ($countryId === null || $departmentId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'department_id' => (int) $departmentId,
+                        'name' => (string) ($item['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($item, 'ubigeo_code'),
+                        'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($item, 'shipping_price')),
+                        'is_active' => (bool) ($item['is_active'] ?? true),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($rows->isEmpty()) {
+                return 0;
+            }
+
+            Province::query()->upsert(
+                $rows->all(),
+                ['external_id'],
+                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            return $rows->count();
+        });
+    }
+
+    public function syncDistricts(): int
+    {
+        return $this->syncResource('districts', function (array $items): int {
+            $countryRows = collect($items)
+                ->map(function (array $item): ?array {
+                    $country = Arr::get($item, 'country');
+                    if (! is_array($country)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($country['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'name' => (string) ($country['name'] ?? ''),
+                        'iso_code_2' => Arr::get($country, 'iso_code_2'),
+                        'iso_code_3' => Arr::get($country, 'iso_code_3'),
+                        'is_active' => true,
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($countryRows->isNotEmpty()) {
+                Country::query()->upsert(
+                    $countryRows->all(),
+                    ['external_id'],
+                    ['name', 'iso_code_2', 'iso_code_3', 'is_active', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $countryMap = Country::query()->pluck('id', 'external_id');
+
+            $departmentRows = collect($items)
+                ->map(function (array $item) use ($countryMap): ?array {
+                    $department = Arr::get($item, 'department');
+                    if (! is_array($department)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($department['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId(
+                        $department['country_id'] ?? Arr::get($item, 'country.id')
+                    );
+
+                    if ($externalId === null || $countryExternalId === null) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    if ($countryId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'name' => (string) ($department['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($department, 'ubigeo_code'),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($departmentRows->isNotEmpty()) {
+                Department::query()->upsert(
+                    $departmentRows->all(),
+                    ['external_id'],
+                    ['country_id', 'name', 'ubigeo_code', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $departmentMap = Department::query()->pluck('id', 'external_id');
+
+            $provinceRows = collect($items)
+                ->map(function (array $item) use ($countryMap, $departmentMap): ?array {
+                    $province = Arr::get($item, 'province');
+                    if (! is_array($province)) {
+                        return null;
+                    }
+
+                    $externalId = $this->resolveNumericExternalId($province['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId(
+                        Arr::get($item, 'country.id') ?? Arr::get($item, 'department.country_id')
+                    );
+                    $departmentExternalId = $this->resolveNumericExternalId(
+                        Arr::get($item, 'department.id') ?? Arr::get($province, 'department_id')
+                    );
+
+                    if ($externalId === null || $countryExternalId === null || $departmentExternalId === null) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    $departmentId = $departmentMap->get($departmentExternalId);
+                    if ($countryId === null || $departmentId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'department_id' => (int) $departmentId,
+                        'name' => (string) ($province['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($province, 'ubigeo_code'),
+                        'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($province, 'shipping_price')),
+                        'is_active' => (bool) ($province['is_active'] ?? true),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => now()->toDateTimeString(),
+                        'created_at' => now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($provinceRows->isNotEmpty()) {
+                Province::query()->upsert(
+                    $provinceRows->all(),
+                    ['external_id'],
+                    ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'is_active', 'remote_updated_at', 'updated_at', 'created_at'],
+                );
+            }
+
+            $provinceMap = Province::query()->pluck('id', 'external_id');
+
+            $rows = collect($items)
+                ->map(function (array $item) use ($countryMap, $departmentMap, $provinceMap): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    $countryExternalId = $this->resolveNumericExternalId(
+                        Arr::get($item, 'country.id') ?? Arr::get($item, 'department.country_id')
+                    );
+                    $departmentExternalId = $this->resolveNumericExternalId(
+                        Arr::get($item, 'department.id') ?? Arr::get($item, 'province.department_id')
+                    );
+                    $provinceExternalId = $this->resolveNumericExternalId($item['province_id'] ?? Arr::get($item, 'province.id'));
+
+                    if (
+                        $externalId === null
+                        || $countryExternalId === null
+                        || $departmentExternalId === null
+                        || $provinceExternalId === null
+                    ) {
+                        return null;
+                    }
+
+                    $countryId = $countryMap->get($countryExternalId);
+                    $departmentId = $departmentMap->get($departmentExternalId);
+                    $provinceId = $provinceMap->get($provinceExternalId);
+                    if ($countryId === null || $departmentId === null || $provinceId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'country_id' => (int) $countryId,
+                        'department_id' => (int) $departmentId,
+                        'province_id' => (int) $provinceId,
+                        'name' => (string) ($item['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($item, 'ubigeo_code'),
+                        'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($item, 'shipping_price')),
+                        'has_delivery_express' => (bool) ($item['has_delivery_express'] ?? false),
+                        'is_active' => (bool) ($item['is_active'] ?? true),
+                        'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($rows->isEmpty()) {
+                return 0;
+            }
+
+            District::query()->upsert(
+                $rows->all(),
+                ['external_id'],
+                ['country_id', 'department_id', 'province_id', 'name', 'ubigeo_code', 'shipping_price', 'has_delivery_express', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            return $rows->count();
+        });
+    }
+
+    public function syncAddresses(): int
+    {
+        return $this->syncResource('addresses', function (array $items): int {
+            $countries = [];
+            $departments = [];
+            $provinces = [];
+            $districts = [];
+
+            foreach ($items as $countryItem) {
+                if (! is_array($countryItem)) {
+                    continue;
+                }
+
+                $countryExternalId = $this->resolveNumericExternalId($countryItem['id'] ?? null);
+                if ($countryExternalId === null) {
+                    continue;
+                }
+
+                $countries[$countryExternalId] = [
+                    'external_id' => $countryExternalId,
+                    'name' => (string) ($countryItem['name'] ?? ''),
+                    'iso_code_2' => Arr::get($countryItem, 'iso_code_2'),
+                    'iso_code_3' => Arr::get($countryItem, 'iso_code_3'),
+                    'is_active' => (bool) ($countryItem['is_active'] ?? true),
+                    'remote_updated_at' => $this->normalizeTimestamp($countryItem['updated_at'] ?? null),
+                    'updated_at' => $this->normalizeTimestamp($countryItem['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'created_at' => $this->normalizeTimestamp($countryItem['created_at'] ?? null) ?? now()->toDateTimeString(),
+                    'deleted_at' => $this->normalizeTimestamp($countryItem['deleted_at'] ?? null),
+                ];
+
+                foreach ((array) Arr::get($countryItem, 'departments', []) as $departmentItem) {
+                    if (! is_array($departmentItem)) {
+                        continue;
+                    }
+
+                    $departmentExternalId = $this->resolveNumericExternalId($departmentItem['id'] ?? null);
+                    if ($departmentExternalId === null) {
+                        continue;
+                    }
+
+                    $departments[$departmentExternalId] = [
+                        'external_id' => $departmentExternalId,
+                        'country_external_id' => $countryExternalId,
+                        'name' => (string) ($departmentItem['name'] ?? ''),
+                        'ubigeo_code' => Arr::get($departmentItem, 'ubigeo_code'),
+                        'remote_updated_at' => $this->normalizeTimestamp($departmentItem['updated_at'] ?? null),
+                        'updated_at' => $this->normalizeTimestamp($departmentItem['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($departmentItem['created_at'] ?? null) ?? now()->toDateTimeString(),
+                        'deleted_at' => $this->normalizeTimestamp($departmentItem['deleted_at'] ?? null),
+                    ];
+
+                    foreach ((array) Arr::get($departmentItem, 'provinces', []) as $provinceItem) {
+                        if (! is_array($provinceItem)) {
+                            continue;
+                        }
+
+                        $provinceExternalId = $this->resolveNumericExternalId($provinceItem['id'] ?? null);
+                        if ($provinceExternalId === null) {
+                            continue;
+                        }
+
+                        $provinces[$provinceExternalId] = [
+                            'external_id' => $provinceExternalId,
+                            'country_external_id' => $countryExternalId,
+                            'department_external_id' => $departmentExternalId,
+                            'name' => (string) ($provinceItem['name'] ?? ''),
+                            'ubigeo_code' => Arr::get($provinceItem, 'ubigeo_code'),
+                            'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($provinceItem, 'shipping_price')),
+                            'is_active' => (bool) ($provinceItem['is_active'] ?? true),
+                            'remote_updated_at' => $this->normalizeTimestamp($provinceItem['updated_at'] ?? null),
+                            'updated_at' => $this->normalizeTimestamp($provinceItem['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                            'created_at' => $this->normalizeTimestamp($provinceItem['created_at'] ?? null) ?? now()->toDateTimeString(),
+                            'deleted_at' => $this->normalizeTimestamp($provinceItem['deleted_at'] ?? null),
+                        ];
+
+                        foreach ((array) Arr::get($provinceItem, 'districts', []) as $districtItem) {
+                            if (! is_array($districtItem)) {
+                                continue;
+                            }
+
+                            $districtExternalId = $this->resolveNumericExternalId($districtItem['id'] ?? null);
+                            if ($districtExternalId === null) {
+                                continue;
+                            }
+
+                            $districts[$districtExternalId] = [
+                                'external_id' => $districtExternalId,
+                                'country_external_id' => $countryExternalId,
+                                'department_external_id' => $departmentExternalId,
+                                'province_external_id' => $provinceExternalId,
+                                'name' => (string) ($districtItem['name'] ?? ''),
+                                'ubigeo_code' => Arr::get($districtItem, 'ubigeo_code'),
+                                'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($districtItem, 'shipping_price')),
+                                'has_delivery_express' => (bool) ($districtItem['has_delivery_express'] ?? false),
+                                'is_active' => (bool) ($districtItem['is_active'] ?? true),
+                                'remote_updated_at' => $this->normalizeTimestamp($districtItem['updated_at'] ?? null),
+                                'updated_at' => $this->normalizeTimestamp($districtItem['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                                'created_at' => $this->normalizeTimestamp($districtItem['created_at'] ?? null) ?? now()->toDateTimeString(),
+                                'deleted_at' => $this->normalizeTimestamp($districtItem['deleted_at'] ?? null),
+                            ];
+                        }
+                    }
+                }
+            }
+
+            if ($countries === [] && $departments === [] && $provinces === [] && $districts === []) {
+                return 0;
+            }
+
+            Country::query()->upsert(
+                array_values($countries),
+                ['external_id'],
+                ['name', 'iso_code_2', 'iso_code_3', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            $countryMap = Country::query()->pluck('id', 'external_id');
+
+            $departmentRows = collect($departments)
+                ->map(function (array $department) use ($countryMap): ?array {
+                    $countryId = $countryMap->get($department['country_external_id']);
+                    if ($countryId === null) {
+                        return null;
+                    }
+
+                    return Arr::except($department, ['country_external_id']) + ['country_id' => $countryId];
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            Department::query()->upsert(
+                $departmentRows,
+                ['external_id'],
+                ['country_id', 'name', 'ubigeo_code', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            $departmentMap = Department::query()->pluck('id', 'external_id');
+
+            $provinceRows = collect($provinces)
+                ->map(function (array $province) use ($countryMap, $departmentMap): ?array {
+                    $countryId = $countryMap->get($province['country_external_id']);
+                    $departmentId = $departmentMap->get($province['department_external_id']);
+                    if ($countryId === null || $departmentId === null) {
+                        return null;
+                    }
+
+                    return Arr::except($province, ['country_external_id', 'department_external_id']) + [
+                        'country_id' => $countryId,
+                        'department_id' => $departmentId,
+                    ];
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            Province::query()->upsert(
+                $provinceRows,
+                ['external_id'],
+                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            $provinceMap = Province::query()->pluck('id', 'external_id');
+
+            $districtRows = collect($districts)
+                ->map(function (array $district) use ($countryMap, $departmentMap, $provinceMap): ?array {
+                    $countryId = $countryMap->get($district['country_external_id']);
+                    $departmentId = $departmentMap->get($district['department_external_id']);
+                    $provinceId = $provinceMap->get($district['province_external_id']);
+                    if ($countryId === null || $departmentId === null || $provinceId === null) {
+                        return null;
+                    }
+
+                    return Arr::except($district, ['country_external_id', 'department_external_id', 'province_external_id']) + [
+                        'country_id' => $countryId,
+                        'department_id' => $departmentId,
+                        'province_id' => $provinceId,
+                    ];
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            District::query()->upsert(
+                $districtRows,
+                ['external_id'],
+                ['country_id', 'department_id', 'province_id', 'name', 'ubigeo_code', 'shipping_price', 'has_delivery_express', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+            );
+
+            return count($countries) + count($departments) + count($provinces) + count($districts);
+        });
+    }
+
     /**
      * @param  callable(array<int, array<string, mixed>>): int|callable(array<int, array<string, mixed>>, string): int  $syncer
      */
@@ -1021,6 +1673,32 @@ class MainStoreSyncService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    protected function normalizeMoneyToMinorAmount(mixed $amount): int
+    {
+        if ($amount === null || $amount === '') {
+            return 0;
+        }
+
+        if (is_int($amount)) {
+            return max(0, $amount);
+        }
+
+        if (is_float($amount)) {
+            return max(0, (int) round($amount * 100));
+        }
+
+        $normalized = str_replace([' ', ','], ['', '.'], (string) $amount);
+        if (! is_numeric($normalized)) {
+            return 0;
+        }
+
+        if (str_contains($normalized, '.')) {
+            return max(0, (int) round(((float) $normalized) * 100));
+        }
+
+        return max(0, (int) $normalized);
     }
 
     /**

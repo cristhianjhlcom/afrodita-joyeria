@@ -2,12 +2,17 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\SyncAddressesJob;
 use App\Jobs\SyncBrandsJob;
 use App\Jobs\SyncCategoriesJob;
+use App\Jobs\SyncCountriesJob;
+use App\Jobs\SyncDepartmentsJob;
+use App\Jobs\SyncDistrictsJob;
 use App\Jobs\SyncImagesJob;
 use App\Jobs\SyncInventoryJob;
 use App\Jobs\SyncOrdersJob;
 use App\Jobs\SyncProductsJob;
+use App\Jobs\SyncProvincesJob;
 use App\Jobs\SyncVariantsJob;
 use App\Models\BrandWhitelist;
 use App\Services\MainStore\MainStoreSyncService;
@@ -19,7 +24,7 @@ class SyncMainStoreCommand extends Command
      * @var string
      */
     protected $signature = 'main-store:sync
-                            {resource=all : all|brands|categories|products|variants|images|inventory|orders}
+                            {resource=all : all|brands|categories|products|variants|images|inventory|orders|countries|departments|provinces|districts|addresses}
                             {--queued : Dispatch jobs instead of running sync inline}';
 
     /**
@@ -31,7 +36,21 @@ class SyncMainStoreCommand extends Command
     {
         $resource = (string) $this->argument('resource');
         $queued = (bool) $this->option('queued');
-        $allowedResources = ['all', 'brands', 'categories', 'products', 'variants', 'images', 'inventory', 'orders'];
+        $allowedResources = [
+            'all',
+            'brands',
+            'categories',
+            'products',
+            'variants',
+            'images',
+            'inventory',
+            'orders',
+            'countries',
+            'departments',
+            'provinces',
+            'districts',
+            'addresses',
+        ];
 
         if (! in_array($resource, $allowedResources, true)) {
             $this->components->error("Unsupported resource [{$resource}].");
@@ -92,6 +111,11 @@ class SyncMainStoreCommand extends Command
             'images' => SyncImagesJob::dispatch(),
             'inventory' => SyncInventoryJob::dispatch(),
             'orders' => SyncOrdersJob::dispatch(),
+            'countries' => SyncCountriesJob::dispatch(),
+            'departments' => SyncDepartmentsJob::dispatch(),
+            'provinces' => SyncProvincesJob::dispatch(),
+            'districts' => SyncDistrictsJob::dispatch(),
+            'addresses' => SyncAddressesJob::dispatch(),
         };
     }
 
@@ -106,6 +130,11 @@ class SyncMainStoreCommand extends Command
             'images' => $syncService->syncImages(),
             'inventory' => $syncService->syncInventory(),
             'orders' => $syncService->syncOrders(),
+            'countries' => $syncService->syncCountries(),
+            'departments' => $syncService->syncDepartments(),
+            'provinces' => $syncService->syncProvinces(),
+            'districts' => $syncService->syncDistricts(),
+            'addresses' => $syncService->syncAddresses(),
         };
     }
 
@@ -118,6 +147,11 @@ class SyncMainStoreCommand extends Command
         SyncImagesJob::dispatch();
         SyncInventoryJob::dispatch();
         SyncOrdersJob::dispatch();
+        SyncCountriesJob::dispatch();
+        SyncDepartmentsJob::dispatch();
+        SyncProvincesJob::dispatch();
+        SyncDistrictsJob::dispatch();
+        SyncAddressesJob::dispatch();
     }
 
     protected function runAllInline(MainStoreSyncService $syncService): void
@@ -129,5 +163,10 @@ class SyncMainStoreCommand extends Command
         $syncService->syncImages();
         $syncService->syncInventory();
         $syncService->syncOrders();
+        $syncService->syncCountries();
+        $syncService->syncDepartments();
+        $syncService->syncProvinces();
+        $syncService->syncDistricts();
+        $syncService->syncAddresses();
     }
 }
