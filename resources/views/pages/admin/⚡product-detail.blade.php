@@ -111,6 +111,7 @@ new class extends Component {
 
                 <flux:table>
                     <flux:table.columns>
+                        <flux:table.column>{{ __('Preview') }}</flux:table.column>
                         <flux:table.column>{{ __('URL') }}</flux:table.column>
                         <flux:table.column>{{ __('Variant') }}</flux:table.column>
                         <flux:table.column>{{ __('Primary') }}</flux:table.column>
@@ -119,6 +120,14 @@ new class extends Component {
                     <flux:table.rows>
                         @forelse ($this->productDetails->images as $image)
                             <flux:table.row :key="$image->id">
+                                <flux:table.cell>
+                                    <flux:avatar
+                                        size="sm"
+                                        :name="$image->variant?->sku ?? $image->variant?->code ?? $this->productDetails->name"
+                                        :src="$image->url"
+                                        :alt="$image->alt ?? ($image->variant?->sku ?? $image->variant?->code ?? $this->productDetails->name)"
+                                    />
+                                </flux:table.cell>
                                 <flux:table.cell>
                                     <a href="{{ $image->url }}" target="_blank" rel="noopener noreferrer" class="text-zinc-900 underline dark:text-zinc-100">
                                         {{ $image->url }}
@@ -136,7 +145,7 @@ new class extends Component {
                             </flux:table.row>
                         @empty
                             <flux:table.row>
-                                <flux:table.cell colspan="4">{{ __('No images available for this product.') }}</flux:table.cell>
+                                <flux:table.cell colspan="5">{{ __('No images available for this product.') }}</flux:table.cell>
                             </flux:table.row>
                         @endforelse
                     </flux:table.rows>
