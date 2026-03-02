@@ -33,7 +33,8 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
   - `dev-admin@afrodita.local`
 
 ## In Progress
-- [ ] Phase 2: deeper admin operations and UX hardening
+- [x] Phase 2: deeper admin operations and UX hardening
+- [ ] Phase 3: public storefront implementation + main-store API contract alignment
 
 ## Pending / Next Phases
 - [x] Add product detail page with variant/image drill-down actions
@@ -318,4 +319,43 @@ Use this format for each session:
 - `php artisan test --compact tests/Feature/Admin/AdminPolicyAuthorizationTest.php tests/Feature/Admin/AdminLivewireActionAuthorizationTest.php tests/Feature/Admin tests/Feature/Console/SyncMainStoreCommandTest.php`
 - Result: Passing (to be re-confirmed after final test run).
 - Next action:
+- Phase 2 completion review and handoff prep for Phase 3.
+
+## Phase 2 Summary (Completed)
+- Admin area is fully functional and hardened:
+- Dashboard, brands, categories, products, product detail, inventory, orders mirror, sync run detail.
+- Operational controls implemented:
+- Full sync trigger, per-resource queue/retry, stale-data warning, repeated-failure alerts.
+- Security and access hardened:
+- Admin middleware + granular policies + route ability checks + Livewire action guards.
+- Data and local bootstrap prepared:
+- Rich factories, development seeder, and local auto-seed workflow after `migrate:fresh`.
+- Performance guardrails added:
+- Query/index improvements and filtering correctness fixes.
+- Coverage status:
+- Admin feature tests and regression suite passing.
+
+## Next Session Handoff (Other Project Requirements)
+For the next feature phase, prepare these items in the main store project so we can guide and connect both systems safely:
+- API contract and auth:
+- Base URL, auth mechanism/token scope, token rotation rules.
+- Confirm endpoint versioning strategy (e.g., `/api/v1/sync/...`).
+- Resource endpoint definitions (request + response examples):
+- Brands, categories, products, variants, images, inventory, orders.
+- Pagination and sync semantics:
+- Cursor/next-cursor format, page size limits, `updated_since` behavior/timezone.
+- Failure and retry semantics:
+- Error payload structure, status codes, rate limits, retry windows.
+- Data identity and mapping:
+- External IDs guaranteed uniqueness per resource.
+- Soft-delete/discontinued behavior and expected downstream handling.
+- Schema references:
+- Current migrations/models for all synced tables and relation keys.
+- Operational requirements:
+- Expected sync frequency and max data volume per resource.
+- Any webhook/event options to complement polling sync.
+
+## Pause Note
+- Work paused by request.
+- Resume point: start Phase 3 planning with the “Next Session Handoff” list above, then implement first public storefront slice.
 - Phase 2 completion review and backlog prioritization.

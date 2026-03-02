@@ -18,6 +18,7 @@ class BrandWhitelistFactory extends Factory
         return [
             'brand_id' => Brand::factory(),
             'enabled' => true,
+            'main_store_token' => null,
         ];
     }
 
@@ -25,6 +26,13 @@ class BrandWhitelistFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'enabled' => false,
+        ]);
+    }
+
+    public function withMainStoreToken(?string $token = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'main_store_token' => $token ?? '1|test-main-store-token',
         ]);
     }
 }

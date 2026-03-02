@@ -43,3 +43,18 @@ it('blocks customers from toggling whitelist directly via livewire', function ()
 
     expect(BrandWhitelist::query()->where('brand_id', $brand->id)->firstOrFail()->enabled)->toBeFalse();
 });
+
+it('blocks customers from creating brand integrations directly via livewire', function () {
+    $customer = User::factory()->create([
+        'role' => UserRole::Customer,
+    ]);
+
+    Livewire::actingAs($customer)
+        ->test('pages::admin.brands')
+        ->set('newBrandName', 'Afrodita')
+        ->set('newBrandExternalId', 22001)
+        ->set('newBrandToken', '1|blocked-token')
+        ->call('createBrandIntegration');
+
+    expect(Brand::query()->where('external_id', 22001)->exists())->toBeFalse();
+});

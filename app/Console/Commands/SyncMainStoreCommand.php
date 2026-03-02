@@ -9,6 +9,7 @@ use App\Jobs\SyncInventoryJob;
 use App\Jobs\SyncOrdersJob;
 use App\Jobs\SyncProductsJob;
 use App\Jobs\SyncVariantsJob;
+use App\Models\BrandWhitelist;
 use App\Services\MainStore\MainStoreSyncService;
 use Illuminate\Console\Command;
 
@@ -38,6 +39,10 @@ class SyncMainStoreCommand extends Command
             return self::FAILURE;
         }
 
+        if (! $this->validateMainStoreConfiguration()) {
+            return self::FAILURE;
+        }
+
         if ($queued) {
             $this->dispatchResourceJobs($resource);
             $this->components->info('Main store sync jobs dispatched.');
@@ -49,6 +54,31 @@ class SyncMainStoreCommand extends Command
         $this->components->info('Main store sync completed.');
 
         return self::SUCCESS;
+    }
+
+    protected function validateMainStoreConfiguration(): bool
+    {
+        $baseUrl = trim((string) config('services.main_store.base_url'));
+        $fallbackToken = trim((string) config('services.main_store.token'));
+
+        if ($baseUrl === '') {
+            $this->components->error('MAIN_STORE_BASE_URL is missing. Set it before running sync.');
+
+            return false;
+        }
+
+        $hasEnabledBrandToken = BrandWhitelist::query()
+            ->where('enabled', true)
+            ->whereNotNull('main_store_token')
+            ->exists();
+
+        if (! $hasEnabledBrandToken && $fallbackToken === '') {
+            $this->components->error('No main store token configured. Save a token in Admin > Brands for an enabled brand or set MAIN_STORE_TOKEN.');
+
+            return false;
+        }
+
+        return true;
     }
 
     protected function dispatchResourceJobs(string $resource): void

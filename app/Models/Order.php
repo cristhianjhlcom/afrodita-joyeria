@@ -16,6 +16,7 @@ class Order extends Model
      */
     protected $fillable = [
         'external_id',
+        'main_store_external_order_id',
         'external_customer_id',
         'status',
         'currency',
@@ -25,6 +26,8 @@ class Order extends Model
         'tax_total',
         'grand_total',
         'placed_at',
+        'cancellation_note',
+        'is_refunded',
     ];
 
     /**
@@ -41,6 +44,7 @@ class Order extends Model
             'tax_total' => 'integer',
             'grand_total' => 'integer',
             'placed_at' => 'datetime',
+            'is_refunded' => 'boolean',
         ];
     }
 

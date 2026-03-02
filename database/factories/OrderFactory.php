@@ -18,6 +18,7 @@ class OrderFactory extends Factory
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
+            'main_store_external_order_id' => null,
             'external_customer_id' => fake()->numberBetween(1, 99999),
             'status' => fake()->randomElement(['pending', 'paid', 'shipped', 'completed']),
             'currency' => 'USD',
@@ -27,6 +28,8 @@ class OrderFactory extends Factory
             'tax_total' => 0,
             'grand_total' => $subtotal,
             'placed_at' => now(),
+            'cancellation_note' => null,
+            'is_refunded' => false,
         ];
     }
 

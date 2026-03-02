@@ -17,6 +17,7 @@ class BrandWhitelist extends Model
     protected $fillable = [
         'brand_id',
         'enabled',
+        'main_store_token',
     ];
 
     /**
@@ -26,6 +27,7 @@ class BrandWhitelist extends Model
     {
         return [
             'enabled' => 'boolean',
+            'main_store_token' => 'encrypted',
         ];
     }
 
