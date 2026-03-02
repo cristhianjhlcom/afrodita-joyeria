@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ProductVariant>
@@ -21,6 +22,7 @@ class ProductVariantFactory extends Factory
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
+            'external_ref' => Str::lower((string) Str::uuid()),
             'product_id' => Product::factory(),
             'sku' => strtoupper(fake()->unique()->bothify('SKU-####')),
             'code' => strtoupper(fake()->unique()->bothify('VAR-####')),
@@ -29,10 +31,12 @@ class ProductVariantFactory extends Factory
             'color' => fake()->safeColorName(),
             'hex' => fake()->hexColor(),
             'size' => fake()->randomElement(['XS', 'S', 'M', 'L', 'XL']),
+            'primary_image_url' => fake()->imageUrl(),
             'stock_on_hand' => $stockOnHand,
             'stock_reserved' => $stockReserved,
             'stock_available' => max(0, $stockOnHand - $stockReserved),
             'is_active' => true,
+            'remote_updated_at' => now(),
         ];
     }
 

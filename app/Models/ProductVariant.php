@@ -18,6 +18,7 @@ class ProductVariant extends Model
      */
     protected $fillable = [
         'external_id',
+        'external_ref',
         'product_id',
         'sku',
         'code',
@@ -30,6 +31,8 @@ class ProductVariant extends Model
         'stock_reserved',
         'stock_available',
         'is_active',
+        'primary_image_url',
+        'remote_updated_at',
     ];
 
     /**
@@ -46,6 +49,7 @@ class ProductVariant extends Model
             'stock_reserved' => 'integer',
             'stock_available' => 'integer',
             'is_active' => 'boolean',
+            'remote_updated_at' => 'datetime',
         ];
     }
 

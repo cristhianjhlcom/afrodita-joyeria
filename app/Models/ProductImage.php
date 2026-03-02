@@ -16,7 +16,7 @@ class ProductImage extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'external_id',
+        'external_ref',
         'product_id',
         'product_variant_id',
         'url',
@@ -31,7 +31,6 @@ class ProductImage extends Model
     protected function casts(): array
     {
         return [
-            'external_id' => 'integer',
             'product_id' => 'integer',
             'product_variant_id' => 'integer',
             'sort_order' => 'integer',

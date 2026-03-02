@@ -39,12 +39,17 @@ class Product extends Model
      */
     protected $fillable = [
         'external_id',
+        'external_ref',
         'brand_id',
+        'category_id',
         'subcategory_id',
         'name',
         'slug',
         'description',
         'status',
+        'sort_order',
+        'url',
+        'remote_updated_at',
     ];
 
     /**
@@ -55,13 +60,21 @@ class Product extends Model
         return [
             'external_id' => 'integer',
             'brand_id' => 'integer',
+            'category_id' => 'integer',
             'subcategory_id' => 'integer',
+            'sort_order' => 'integer',
+            'remote_updated_at' => 'datetime',
         ];
     }
 
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_id');
     }
 
     public function subcategory(): BelongsTo

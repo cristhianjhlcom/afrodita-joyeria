@@ -22,12 +22,17 @@ class ProductFactory extends Factory
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
+            'external_ref' => Str::lower((string) Str::uuid()),
             'brand_id' => Brand::factory(),
+            'category_id' => Category::factory(),
             'subcategory_id' => Category::factory(),
-            'name' => Str::limit($name, 70, ''),
+            'name' => $name,
             'slug' => Str::slug($name.'-'.fake()->unique()->numerify('###')),
             'description' => fake()->paragraph(),
             'status' => Product::STATUS_DRAFT,
+            'sort_order' => fake()->numberBetween(0, 20),
+            'url' => fake()->url(),
+            'remote_updated_at' => now(),
         ];
     }
 
