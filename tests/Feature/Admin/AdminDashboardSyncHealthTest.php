@@ -33,7 +33,7 @@ it('shows healthy sync status when all resources are fresh', function () {
         'role' => UserRole::Admin,
     ]);
 
-    foreach (['brands', 'categories', 'products', 'variant-images', 'variants', 'inventory', 'orders'] as $resource) {
+    foreach (['brands', 'categories', 'products', 'variant-images', 'variants', 'inventory', 'orders', 'countries', 'departments', 'provinces', 'districts', 'addresses'] as $resource) {
         SyncRun::factory()->completed()->create([
             'resource' => $resource,
             'checkpoint_updated_since' => now()->subMinutes(5),

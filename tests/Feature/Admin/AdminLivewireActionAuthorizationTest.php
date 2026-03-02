@@ -25,6 +25,21 @@ it('blocks customers from queueing products sync actions directly via livewire',
     Artisan::shouldNotHaveReceived('call');
 });
 
+it('blocks customers from queueing addresses sync actions directly via livewire', function () {
+    $customer = User::factory()->create([
+        'role' => UserRole::Customer,
+    ]);
+
+    Artisan::spy();
+
+    Livewire::actingAs($customer)
+        ->test('pages::admin.addresses')
+        ->call('queueAddressesSync')
+        ->assertForbidden();
+
+    Artisan::shouldNotHaveReceived('call');
+});
+
 it('blocks customers from toggling whitelist directly via livewire', function () {
     $customer = User::factory()->create([
         'role' => UserRole::Customer,

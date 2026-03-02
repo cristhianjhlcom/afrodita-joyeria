@@ -3,10 +3,14 @@
 use App\Models\Brand;
 use App\Models\BrandWhitelist;
 use App\Models\Category;
+use App\Models\Country;
+use App\Models\Department;
+use App\Models\District;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Models\Province;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -194,6 +198,159 @@ it('syncs mirrored orders from main store', function () {
     expect($order->items->first()->sku)->toBe('SKU-0001');
     expect($order->getRawOriginal('updated_at'))->toContain(' ');
     expect($order->getRawOriginal('updated_at'))->not->toContain('T');
+});
+
+it('syncs address resources from main store endpoints', function () {
+    Http::fake([
+        'https://main-store.test/api/v1/sync/countries*' => Http::response([
+            'data' => [
+                [
+                    'id' => 1,
+                    'name' => 'Perú',
+                    'iso_code_2' => 'PE',
+                    'iso_code_3' => 'PER',
+                    'is_active' => true,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/departments*' => Http::response([
+            'data' => [
+                [
+                    'id' => 15,
+                    'country_id' => 1,
+                    'name' => 'Lima',
+                    'ubigeo_code' => '15',
+                    'country' => [
+                        'id' => 1,
+                        'name' => 'Perú',
+                        'iso_code_2' => 'PE',
+                        'iso_code_3' => 'PER',
+                    ],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/provinces*' => Http::response([
+            'data' => [
+                [
+                    'id' => 1501,
+                    'department_id' => 15,
+                    'name' => 'Lima',
+                    'ubigeo_code' => '1501',
+                    'shipping_price' => '12.50',
+                    'is_active' => true,
+                    'country' => [
+                        'id' => 1,
+                        'name' => 'Perú',
+                        'iso_code_2' => 'PE',
+                        'iso_code_3' => 'PER',
+                    ],
+                    'department' => [
+                        'id' => 15,
+                        'country_id' => 1,
+                        'name' => 'Lima',
+                        'ubigeo_code' => '15',
+                    ],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/districts*' => Http::response([
+            'data' => [
+                [
+                    'id' => 150101,
+                    'province_id' => 1501,
+                    'name' => 'Lima',
+                    'ubigeo_code' => '150101',
+                    'shipping_price' => '12.50',
+                    'has_delivery_express' => true,
+                    'is_active' => true,
+                    'country' => [
+                        'id' => 1,
+                        'name' => 'Perú',
+                        'iso_code_2' => 'PE',
+                        'iso_code_3' => 'PER',
+                    ],
+                    'department' => [
+                        'id' => 15,
+                        'country_id' => 1,
+                        'name' => 'Lima',
+                        'ubigeo_code' => '15',
+                    ],
+                    'province' => [
+                        'id' => 1501,
+                        'department_id' => 15,
+                        'name' => 'Lima',
+                        'ubigeo_code' => '1501',
+                        'shipping_price' => '12.50',
+                        'is_active' => true,
+                    ],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/addresses*' => Http::response([
+            'data' => [
+                [
+                    'id' => 1,
+                    'name' => 'Perú',
+                    'iso_code_2' => 'PE',
+                    'iso_code_3' => 'PER',
+                    'is_active' => true,
+                    'departments' => [
+                        [
+                            'id' => 15,
+                            'country_id' => 1,
+                            'name' => 'Lima',
+                            'ubigeo_code' => '15',
+                            'provinces' => [
+                                [
+                                    'id' => 1501,
+                                    'department_id' => 15,
+                                    'name' => 'Lima',
+                                    'ubigeo_code' => '1501',
+                                    'shipping_price' => '12.50',
+                                    'is_active' => true,
+                                    'districts' => [
+                                        [
+                                            'id' => 150101,
+                                            'province_id' => 1501,
+                                            'name' => 'Lima',
+                                            'ubigeo_code' => '150101',
+                                            'shipping_price' => '12.50',
+                                            'has_delivery_express' => true,
+                                            'is_active' => true,
+                                            'updated_at' => now()->toIso8601String(),
+                                        ],
+                                    ],
+                                    'updated_at' => now()->toIso8601String(),
+                                ],
+                            ],
+                            'updated_at' => now()->toIso8601String(),
+                        ],
+                    ],
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'countries'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'departments'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'provinces'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'districts'])->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'addresses'])->assertSuccessful();
+
+    expect(Country::query()->where('external_id', 1)->exists())->toBeTrue();
+    expect(Department::query()->where('external_id', 15)->exists())->toBeTrue();
+    expect(Province::query()->where('external_id', 1501)->where('shipping_price', 1250)->exists())->toBeTrue();
+    expect(District::query()->where('external_id', 150101)->where('shipping_price', 1250)->where('has_delivery_express', true)->exists())->toBeTrue();
 });
 
 it('supports endpoint aliases for brand and stock sync resources', function () {

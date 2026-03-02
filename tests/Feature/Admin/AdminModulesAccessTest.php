@@ -23,6 +23,11 @@ it('allows admins to access admin modules', function (string $routeName) {
     'admin products' => 'admin.products',
     'admin inventory' => 'admin.inventory',
     'admin orders' => 'admin.orders',
+    'admin addresses' => 'admin.addresses',
+    'admin countries' => 'admin.countries',
+    'admin departments' => 'admin.departments',
+    'admin provinces' => 'admin.provinces',
+    'admin districts' => 'admin.districts',
 ]);
 
 it('allows admins to access product detail module', function () {
@@ -64,6 +69,11 @@ it('forbids customers from admin modules', function (string $routeName) {
     'admin.products',
     'admin.inventory',
     'admin.orders',
+    'admin.addresses',
+    'admin.countries',
+    'admin.departments',
+    'admin.provinces',
+    'admin.districts',
 ]);
 
 it('forbids customers from product detail module', function () {
