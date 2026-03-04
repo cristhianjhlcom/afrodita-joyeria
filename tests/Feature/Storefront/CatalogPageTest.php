@@ -180,3 +180,27 @@ it('filters catalog by category and subcategory', function () {
         ->assertSee('Wedding Gold Band')
         ->assertDontSee('Pearl Drop Necklace');
 });
+
+it('falls back to all products when filters return no results', function () {
+    $subcategory = Category::factory()->create();
+
+    $firstProduct = Product::factory()->create([
+        'name' => 'Open Catalog Ring',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    $secondProduct = Product::factory()->create([
+        'name' => 'Open Catalog Necklace',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create(['product_id' => $firstProduct->id, 'price' => 15000, 'is_active' => true]);
+    ProductVariant::factory()->create(['product_id' => $secondProduct->id, 'price' => 18000, 'is_active' => true]);
+
+    $this->get(route('home', ['q' => 'non-existent-item']))
+        ->assertSuccessful()
+        ->assertSee('Open Catalog Ring')
+        ->assertSee('Open Catalog Necklace');
+});

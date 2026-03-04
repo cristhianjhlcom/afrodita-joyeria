@@ -138,8 +138,9 @@ new class extends Component {
         $effectiveMin = max($bounds['min'], min($this->priceMin, $this->priceMax));
         $effectiveMax = max($this->priceMin, $this->priceMax);
         $hasPriceRangeFilter = $effectiveMin > $bounds['min'] || $effectiveMax < $bounds['max'];
+        $hasActiveFilters = $searchTerm !== '' || $selectedCategories !== [] || $selectedSubcategories !== [] || $hasPriceRangeFilter;
 
-        return Product::query()
+        $baseQuery = Product::query()
             ->with([
                 'brand:id,name',
                 'category:id,name',
@@ -153,10 +154,12 @@ new class extends Component {
                     ->whereNull('deleted_at')
                     ->where('is_active', true),
             ])
-            ->whereNull('deleted_at')
-            ->when($searchTerm !== '', fn (Builder $query) => $query->where('name', 'like', "%{$searchTerm}%"))
-            ->when($selectedCategories !== [], fn (Builder $query) => $query->whereIn('category_id', $selectedCategories))
-            ->when($selectedSubcategories !== [], fn (Builder $query) => $query->whereIn('subcategory_id', $selectedSubcategories))
+            ->whereNull('deleted_at');
+
+        $filteredQuery = (clone $baseQuery)
+            ->when($searchTerm !== '', fn (Builder $query): Builder => $query->where('name', 'like', "%{$searchTerm}%"))
+            ->when($selectedCategories !== [], fn (Builder $query): Builder => $query->whereIn('category_id', $selectedCategories))
+            ->when($selectedSubcategories !== [], fn (Builder $query): Builder => $query->whereIn('subcategory_id', $selectedSubcategories))
             ->when($hasPriceRangeFilter, function (Builder $query) use ($effectiveMin, $effectiveMax): void {
                 $query->whereHas('variants', function (Builder $variantQuery) use ($effectiveMin, $effectiveMax): void {
                     $variantQuery
@@ -165,7 +168,15 @@ new class extends Component {
                         ->whereRaw('COALESCE(sale_price, price) >= ?', [$effectiveMin])
                         ->whereRaw('COALESCE(sale_price, price) <= ?', [$effectiveMax]);
                 });
-            })
+            });
+
+        if ($hasActiveFilters && ! (clone $filteredQuery)->exists()) {
+            return $baseQuery
+                ->latest('updated_at')
+                ->paginate(12);
+        }
+
+        return $filteredQuery
             ->latest('updated_at')
             ->paginate(12);
     }
@@ -212,7 +223,7 @@ new class extends Component {
                     type="text"
                     wire:model.live.debounce.300ms="search"
                     placeholder="{{ __('Search product name...') }}"
-                    class="w-full rounded-sm border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    class="w-full rounded-sm border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                 >
             </div>
 
@@ -248,7 +259,7 @@ new class extends Component {
                     @forelse ($this->categoryTree as $category)
                         <div class="space-y-2">
                             <label class="flex items-center gap-2 text-sm font-medium">
-                                <input type="checkbox" wire:model.live="categories" value="{{ $category->id }}" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
+                                <input type="checkbox" wire:model.live="categories" value="{{ $category->id }}" class="rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
                                 <span>{{ $category->name }}</span>
                             </label>
 
@@ -256,7 +267,7 @@ new class extends Component {
                                 <div class="ml-5 space-y-2">
                                     @foreach ($category->children as $subcategory)
                                         <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                                            <input type="checkbox" wire:model.live="subcategories" value="{{ $subcategory->id }}" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
+                                            <input type="checkbox" wire:model.live="subcategories" value="{{ $subcategory->id }}" class="rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
                                             <span>{{ $subcategory->name }}</span>
                                         </label>
                                     @endforeach
@@ -273,7 +284,7 @@ new class extends Component {
         <div class="space-y-6">
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 @forelse ($this->products as $product)
-                    <article class="overflow-hidden rounded-sm border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900">
+                    <article class="overflow-hidden rounded-sm border border-zinc-200 bg-white transition dark:border-zinc-700 dark:bg-zinc-900">
                         <div class="aspect-square overflow-hidden rounded-sm border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
                             @if ($product->images->first()?->url)
                                 <img
