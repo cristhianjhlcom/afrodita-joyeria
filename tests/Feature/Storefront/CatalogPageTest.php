@@ -36,6 +36,33 @@ it('renders the storefront catalog on home route', function () {
         ->assertSee('Ariel Ring');
 });
 
+it('shows all products when no search or filters are applied', function () {
+    $subcategory = Category::factory()->create();
+
+    $withVariant = Product::factory()->create([
+        'name' => 'Variant Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    $withoutVariant = Product::factory()->create([
+        'name' => 'No Variant Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $withVariant->id,
+        'price' => 19900,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee('Variant Product')
+        ->assertSee('No Variant Product');
+});
+
 it('paginates products on storefront grid', function () {
     $subcategory = Category::factory()->create();
 
@@ -84,41 +111,6 @@ it('filters catalog by search term', function () {
         ->assertDontSee('Silver Bracelet');
 });
 
-it('filters catalog by color and size', function () {
-    $subcategory = Category::factory()->create();
-
-    $goldRing = Product::factory()->create([
-        'name' => 'Gold Ring',
-        'subcategory_id' => $subcategory->id,
-        'category_id' => null,
-    ]);
-
-    $blueRing = Product::factory()->create([
-        'name' => 'Blue Ring',
-        'subcategory_id' => $subcategory->id,
-        'category_id' => null,
-    ]);
-
-    ProductVariant::factory()->create([
-        'product_id' => $goldRing->id,
-        'color' => 'Gold',
-        'size' => 'M',
-        'price' => 28000,
-    ]);
-
-    ProductVariant::factory()->create([
-        'product_id' => $blueRing->id,
-        'color' => 'Blue',
-        'size' => 'L',
-        'price' => 18000,
-    ]);
-
-    $this->get(route('home', ['colors' => ['Gold'], 'sizes' => ['M']]))
-        ->assertSuccessful()
-        ->assertSee('Gold Ring')
-        ->assertDontSee('Blue Ring');
-});
-
 it('filters catalog by min and max price', function () {
     $subcategory = Category::factory()->create();
 
@@ -146,7 +138,7 @@ it('filters catalog by min and max price', function () {
         'sale_price' => 35000,
     ]);
 
-    $this->get(route('home', ['min' => '100', 'max' => '360']))
+    $this->get(route('home', ['min' => 10000, 'max' => 36000]))
         ->assertSuccessful()
         ->assertSee('Premium Diamond Ring')
         ->assertDontSee('Budget Studs');

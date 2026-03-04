@@ -4,6 +4,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
@@ -17,14 +18,6 @@ new class extends Component {
     public string $search = '';
 
     /** @var list<string> */
-    #[Url(as: 'colors')]
-    public array $colors = [];
-
-    /** @var list<string> */
-    #[Url(as: 'sizes')]
-    public array $sizes = [];
-
-    /** @var list<string> */
     #[Url(as: 'cats')]
     public array $categories = [];
 
@@ -33,10 +26,10 @@ new class extends Component {
     public array $subcategories = [];
 
     #[Url(as: 'min')]
-    public string $priceMin = '';
+    public int $priceMin = 0;
 
     #[Url(as: 'max')]
-    public string $priceMax = '';
+    public int $priceMax = 0;
 
     public function rendering(View $view): void
     {
@@ -46,16 +39,6 @@ new class extends Component {
     }
 
     public function updatedSearch(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedColors(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedSizes(): void
     {
         $this->resetPage();
     }
@@ -95,52 +78,50 @@ new class extends Component {
             ->get(['id', 'name']);
     }
 
-    #[Computed]
-    public function availableColors()
+    public function mount(): void
     {
-        return ProductVariant::query()
-            ->whereNull('deleted_at')
-            ->where('is_active', true)
-            ->whereNotNull('color')
-            ->whereHas('product', fn ($query) => $query->whereNull('deleted_at'))
-            ->distinct()
-            ->orderBy('color')
-            ->pluck('color')
-            ->filter(fn (?string $color): bool => $color !== null && trim($color) !== '')
-            ->values();
+        $bounds = $this->priceBounds;
+
+        if ($this->priceMin < $bounds['min']) {
+            $this->priceMin = $bounds['min'];
+        }
+
+        if ($this->priceMax <= 0 || $this->priceMax > $bounds['max']) {
+            $this->priceMax = $bounds['max'];
+        }
     }
 
     #[Computed]
-    public function availableSizes()
+    public function priceBounds(): array
     {
-        return ProductVariant::query()
+        /** @var Collection<int, ProductVariant> $variants */
+        $variants = ProductVariant::query()
             ->whereNull('deleted_at')
             ->where('is_active', true)
-            ->whereNotNull('size')
             ->whereHas('product', fn ($query) => $query->whereNull('deleted_at'))
-            ->distinct()
-            ->orderBy('size')
-            ->pluck('size')
-            ->filter(fn (?string $size): bool => $size !== null && trim($size) !== '')
+            ->where(function (Builder $query): void {
+                $query->whereNotNull('sale_price')->orWhereNotNull('price');
+            })
+            ->get(['price', 'sale_price']);
+
+        $effectivePrices = $variants
+            ->map(fn (ProductVariant $variant): ?int => $variant->sale_price ?? $variant->price)
+            ->filter(fn (?int $amount): bool => $amount !== null)
             ->values();
+
+        $min = (int) ($effectivePrices->min() ?? 0);
+        $max = (int) ($effectivePrices->max() ?? 200_000);
+
+        return [
+            'min' => $min,
+            'max' => max($min, $max),
+        ];
     }
 
     #[Computed]
     public function products()
     {
         $searchTerm = trim($this->search);
-        $selectedColors = collect($this->colors)
-            ->map(fn (string $color): string => trim($color))
-            ->filter()
-            ->values()
-            ->all();
-
-        $selectedSizes = collect($this->sizes)
-            ->map(fn (string $size): string => trim($size))
-            ->filter()
-            ->values()
-            ->all();
-
         $selectedCategories = collect($this->categories)
             ->map(fn (string $id): int => (int) $id)
             ->filter(fn (int $id): bool => $id > 0)
@@ -153,8 +134,10 @@ new class extends Component {
             ->values()
             ->all();
 
-        $minPrice = $this->normalizeMajorPriceToMinorAmount($this->priceMin);
-        $maxPrice = $this->normalizeMajorPriceToMinorAmount($this->priceMax);
+        $bounds = $this->priceBounds;
+        $effectiveMin = max($bounds['min'], min($this->priceMin, $this->priceMax));
+        $effectiveMax = max($this->priceMin, $this->priceMax);
+        $hasPriceRangeFilter = $effectiveMin > $bounds['min'] || $effectiveMax < $bounds['max'];
 
         return Product::query()
             ->with([
@@ -174,14 +157,14 @@ new class extends Component {
             ->when($searchTerm !== '', fn (Builder $query) => $query->where('name', 'like', "%{$searchTerm}%"))
             ->when($selectedCategories !== [], fn (Builder $query) => $query->whereIn('category_id', $selectedCategories))
             ->when($selectedSubcategories !== [], fn (Builder $query) => $query->whereIn('subcategory_id', $selectedSubcategories))
-            ->whereHas('variants', function (Builder $query) use ($selectedColors, $selectedSizes, $minPrice, $maxPrice): void {
-                $query
-                    ->whereNull('deleted_at')
-                    ->where('is_active', true)
-                    ->when($selectedColors !== [], fn (Builder $variantQuery) => $variantQuery->whereIn('color', $selectedColors))
-                    ->when($selectedSizes !== [], fn (Builder $variantQuery) => $variantQuery->whereIn('size', $selectedSizes))
-                    ->when($minPrice !== null, fn (Builder $variantQuery) => $variantQuery->whereRaw('COALESCE(sale_price, price) >= ?', [$minPrice]))
-                    ->when($maxPrice !== null, fn (Builder $variantQuery) => $variantQuery->whereRaw('COALESCE(sale_price, price) <= ?', [$maxPrice]));
+            ->when($hasPriceRangeFilter, function (Builder $query) use ($effectiveMin, $effectiveMax): void {
+                $query->whereHas('variants', function (Builder $variantQuery) use ($effectiveMin, $effectiveMax): void {
+                    $variantQuery
+                        ->whereNull('deleted_at')
+                        ->where('is_active', true)
+                        ->whereRaw('COALESCE(sale_price, price) >= ?', [$effectiveMin])
+                        ->whereRaw('COALESCE(sale_price, price) <= ?', [$effectiveMax]);
+                });
             })
             ->latest('updated_at')
             ->paginate(12);
@@ -209,19 +192,9 @@ new class extends Component {
         return money($amount, config('services.main_store.currency', 'PEN'))->format();
     }
 
-    protected function normalizeMajorPriceToMinorAmount(string $value): ?int
+    public function formattedMajorAmount(int $amount): string
     {
-        $trimmed = trim($value);
-        if ($trimmed === '') {
-            return null;
-        }
-
-        $normalized = str_replace([' ', ','], ['', '.'], $trimmed);
-        if (! is_numeric($normalized)) {
-            return null;
-        }
-
-        return max(0, (int) round(((float) $normalized) * 100));
+        return number_format($amount / 100, 2);
     }
 }; ?>
 
@@ -232,60 +205,40 @@ new class extends Component {
     </header>
 
     <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside class="space-y-6 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <aside class="space-y-6 rounded-sm border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
             <div class="space-y-2">
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Search') }}</h2>
                 <input
                     type="text"
                     wire:model.live.debounce.300ms="search"
                     placeholder="{{ __('Search product name...') }}"
-                    class="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    class="w-full rounded-sm border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                 >
             </div>
 
             <div class="space-y-2">
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Price') }}</h2>
-                <div class="grid grid-cols-2 gap-2">
-                    <input
-                        type="text"
-                        wire:model.live.debounce.400ms="priceMin"
-                        placeholder="{{ __('Min') }}"
-                        class="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                    >
-                    <input
-                        type="text"
-                        wire:model.live.debounce.400ms="priceMax"
-                        placeholder="{{ __('Max') }}"
-                        class="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                    >
-                </div>
-            </div>
-
-            <div class="space-y-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Colors') }}</h2>
-                <div class="max-h-52 space-y-2 overflow-auto pr-1">
-                    @forelse ($this->availableColors as $color)
-                        <label class="flex items-center gap-2 text-sm">
-                            <input type="checkbox" wire:model.live="colors" value="{{ $color }}" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
-                            <span>{{ $color }}</span>
-                        </label>
-                    @empty
-                        <p class="text-xs text-zinc-500">{{ __('No colors available') }}</p>
-                    @endforelse
-                </div>
-            </div>
-
-            <div class="space-y-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Sizes') }}</h2>
-                <div class="max-h-52 space-y-2 overflow-auto pr-1">
-                    @forelse ($this->availableSizes as $size)
-                        <label class="flex items-center gap-2 text-sm">
-                            <input type="checkbox" wire:model.live="sizes" value="{{ $size }}" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
-                            <span>{{ $size }}</span>
-                        </label>
-                    @empty
-                        <p class="text-xs text-zinc-500">{{ __('No sizes available') }}</p>
-                    @endforelse
+                <div class="rounded-sm border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="mb-3 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                        <span>{{ __('Min') }}: {{ $this->formattedMajorAmount($priceMin) }}</span>
+                        <span>{{ __('Max') }}: {{ $this->formattedMajorAmount($priceMax) }}</span>
+                    </div>
+                    <div class="space-y-3">
+                        <input
+                            type="range"
+                            wire:model.live="priceMin"
+                            min="{{ $this->priceBounds['min'] }}"
+                            max="{{ $this->priceBounds['max'] }}"
+                            class="w-full accent-zinc-900 dark:accent-zinc-100"
+                        >
+                        <input
+                            type="range"
+                            wire:model.live="priceMax"
+                            min="{{ $this->priceBounds['min'] }}"
+                            max="{{ $this->priceBounds['max'] }}"
+                            class="w-full accent-zinc-900 dark:accent-zinc-100"
+                        >
+                    </div>
                 </div>
             </div>
 
@@ -320,8 +273,8 @@ new class extends Component {
         <div class="space-y-6">
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 @forelse ($this->products as $product)
-                    <article class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900">
-                        <div class="aspect-square overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                    <article class="overflow-hidden rounded-sm border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900">
+                        <div class="aspect-square overflow-hidden rounded-sm border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
                             @if ($product->images->first()?->url)
                                 <img
                                     src="{{ $product->images->first()?->url }}"
@@ -359,7 +312,7 @@ new class extends Component {
                         </div>
                     </article>
                 @empty
-                    <div class="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                    <div class="col-span-full rounded-sm border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
                         {{ __('No products found for the selected filters.') }}
                     </div>
                 @endforelse
