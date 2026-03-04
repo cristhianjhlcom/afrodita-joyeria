@@ -190,6 +190,16 @@ new class extends Component {
             ->min();
     }
 
+    public function productCardImageUrl(Product $product): ?string
+    {
+        $featuredImage = trim((string) ($product->featured_image ?? ''));
+        if ($featuredImage !== '') {
+            return $featuredImage;
+        }
+
+        return $product->images->first()?->url;
+    }
+
     public function hasStock(Product $product): bool
     {
         return $product->variants->contains(fn (ProductVariant $variant): bool => (int) $variant->stock_available > 0);
@@ -287,9 +297,9 @@ new class extends Component {
                 @forelse ($this->products as $product)
                     <article class="overflow-hidden rounded-sm border border-zinc-200 bg-white transition dark:border-zinc-700 dark:bg-zinc-900">
                         <div class="aspect-square overflow-hidden rounded-sm border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
-                            @if ($product->images->first()?->url)
+                            @if ($this->productCardImageUrl($product))
                                 <img
-                                    src="{{ $product->images->first()?->url }}"
+                                    src="{{ $this->productCardImageUrl($product) }}"
                                     alt="{{ $product->name }}"
                                     class="h-full w-full object-cover"
                                     loading="lazy"

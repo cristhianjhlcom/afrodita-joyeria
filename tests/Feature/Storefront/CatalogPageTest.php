@@ -212,6 +212,7 @@ it('renders product card image from product images and not variant images', func
         'name' => 'Image Source Product',
         'subcategory_id' => $subcategory->id,
         'category_id' => null,
+        'featured_image' => null,
     ]);
 
     $variant = ProductVariant::factory()->create([
@@ -238,4 +239,33 @@ it('renders product card image from product images and not variant images', func
         ->assertSuccessful()
         ->assertSee('https://cdn.test/product-image.png', false)
         ->assertDontSee('https://cdn.test/variant-image.png', false);
+});
+
+it('prioritizes featured image over synced product images in catalog cards', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Featured Card Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+        'featured_image' => 'https://cdn.test/featured-image.png',
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 15000,
+        'is_active' => true,
+    ]);
+
+    ProductImage::factory()->create([
+        'product_id' => $product->id,
+        'variant_id' => null,
+        'url' => 'https://cdn.test/fallback-product-image.png',
+        'is_primary' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee('https://cdn.test/featured-image.png', false)
+        ->assertDontSee('https://cdn.test/fallback-product-image.png', false);
 });

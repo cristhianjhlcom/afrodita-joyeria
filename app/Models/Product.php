@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -39,7 +38,6 @@ class Product extends Model
      */
     protected $fillable = [
         'external_id',
-        'external_ref',
         'brand_id',
         'category_id',
         'subcategory_id',
@@ -49,6 +47,8 @@ class Product extends Model
         'status',
         'sort_order',
         'url',
+        'featured_image',
+        'youtube_video_id',
         'remote_updated_at',
     ];
 
@@ -80,11 +80,6 @@ class Product extends Model
     public function subcategory(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'subcategory_id');
-    }
-
-    public function categories(): BelongsToMany
-    {
-        return $this->belongsToMany(Category::class)->withTimestamps();
     }
 
     public function variants(): HasMany

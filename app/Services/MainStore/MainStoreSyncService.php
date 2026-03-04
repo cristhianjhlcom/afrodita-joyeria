@@ -213,6 +213,8 @@ class MainStoreSyncService
                     'status' => (string) ($item['status'] ?? Product::STATUS_DRAFT),
                     'sort_order' => (int) ($item['order'] ?? 0),
                     'url' => Arr::get($item, 'url'),
+                    'featured_image' => Arr::get($item, 'featured_image'),
+                    'youtube_video_id' => Arr::get($item, 'youtube_video_id'),
                     'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
                     'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
                     'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
@@ -303,7 +305,7 @@ class MainStoreSyncService
             Product::query()->upsert(
                 $rows->all(),
                 ['external_id'],
-                ['brand_id', 'category_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'sort_order', 'url', 'remote_updated_at', 'deleted_at', 'updated_at', 'created_at'],
+                ['brand_id', 'category_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'sort_order', 'url', 'featured_image', 'youtube_video_id', 'remote_updated_at', 'deleted_at', 'updated_at', 'created_at'],
             );
 
             if ($variantRows->isNotEmpty()) {

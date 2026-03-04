@@ -588,6 +588,8 @@ it('stores payload order url and normalized product and variant images', functio
                 'status' => 'draft',
                 'order' => 7,
                 'url' => 'http://localhost:8000/anillos/anillos-con-figuras/producto-de-prueba-02',
+                'featured_image' => 'http://localhost:8000/storage/public/products/featured-p-1.webp',
+                'youtube_video_id' => 'dQw4w9WgXcQ',
                 'images' => [
                     'http://localhost:8000/storage/public/products/p-1.webp',
                     'http://localhost:8000/storage/public/products/p-2.webp',
@@ -624,6 +626,8 @@ it('stores payload order url and normalized product and variant images', functio
 
     expect($product->sort_order)->toBe(7);
     expect($product->url)->toContain('/producto-de-prueba-02');
+    expect($product->featured_image)->toContain('/products/featured-p-1.webp');
+    expect($product->youtube_video_id)->toBe('dQw4w9WgXcQ');
     expect($variant->primary_image_url)->toContain('/variants/v-1.webp');
     expect(ProductImage::query()->where('product_id', $product->id)->count())->toBe(4);
     expect(ProductImage::query()->where('variant_id', $variant->id)->exists())->toBeTrue();

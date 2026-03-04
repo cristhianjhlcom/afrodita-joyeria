@@ -22,7 +22,6 @@ class ProductFactory extends Factory
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
-            'external_ref' => Str::lower((string) Str::uuid()),
             'brand_id' => Brand::factory(),
             'category_id' => Category::factory(),
             'subcategory_id' => Category::factory(),
@@ -32,6 +31,8 @@ class ProductFactory extends Factory
             'status' => Product::STATUS_DRAFT,
             'sort_order' => fake()->numberBetween(0, 20),
             'url' => fake()->url(),
+            'featured_image' => fake()->imageUrl(),
+            'youtube_video_id' => fake()->optional()->regexify('[A-Za-z0-9_-]{11}'),
             'remote_updated_at' => now(),
         ];
     }
