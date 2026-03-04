@@ -5,7 +5,6 @@ namespace Database\Factories;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ProductImage>
@@ -18,9 +17,9 @@ class ProductImageFactory extends Factory
     public function definition(): array
     {
         return [
-            'external_ref' => Str::lower((string) Str::uuid()),
+            'external_id' => fake()->unique()->numberBetween(1, 999999),
             'product_id' => Product::factory(),
-            'product_variant_id' => ProductVariant::factory(),
+            'variant_id' => ProductVariant::factory(),
             'url' => fake()->imageUrl(),
             'sort_order' => fake()->numberBetween(0, 10),
             'alt' => fake()->sentence(4),

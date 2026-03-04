@@ -32,11 +32,10 @@ class CatalogSeeder extends Seeder
                     ->count(4)
                     ->create([
                         'brand_id' => $brand->id,
+                        'category_id' => $parentCategory->id,
                         'subcategory_id' => $subcategory->id,
                     ])
-                    ->each(function (Product $product) use ($subcategory): void {
-                        $product->categories()->syncWithoutDetaching([$subcategory->id]);
-
+                    ->each(function (Product $product): void {
                         ProductVariant::factory()
                             ->count(2)
                             ->create([
@@ -45,7 +44,7 @@ class CatalogSeeder extends Seeder
                             ->each(function (ProductVariant $variant) use ($product): void {
                                 ProductImage::factory()->count(2)->create([
                                     'product_id' => $product->id,
-                                    'product_variant_id' => $variant->id,
+                                    'variant_id' => $variant->id,
                                 ]);
                             });
                     });

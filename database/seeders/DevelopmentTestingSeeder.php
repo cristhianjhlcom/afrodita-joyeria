@@ -90,29 +90,24 @@ class DevelopmentTestingSeeder extends Seeder
         foreach ($brands->whereIn('id', $whitelistedBrandIds) as $brand) {
             Product::factory()
                 ->count(10)
-                ->state(fn (array $attributes): array => [
-                    'status' => fake()->randomElement([
-                        Product::STATUS_PUBLISHED,
-                        Product::STATUS_IN_STOCK,
-                        Product::STATUS_OUT_OF_STOCK,
-                        Product::STATUS_PRE_ORDER,
-                    ]),
-                    'subcategory_id' => $subcategories->random()->id,
-                ])
+                ->state(function (array $attributes) use ($subcategories): array {
+                    $subcategoryId = $subcategories->random()->id;
+
+                    return [
+                        'status' => fake()->randomElement([
+                            Product::STATUS_PUBLISHED,
+                            Product::STATUS_IN_STOCK,
+                            Product::STATUS_OUT_OF_STOCK,
+                            Product::STATUS_PRE_ORDER,
+                        ]),
+                        'subcategory_id' => $subcategoryId,
+                        'category_id' => Category::query()->whereKey($subcategoryId)->value('parent_id'),
+                    ];
+                })
                 ->create([
                     'brand_id' => $brand->id,
                 ])
                 ->each(function (Product $product) use (&$products): void {
-                    $subcategory = Category::query()->find($product->subcategory_id);
-                    if ($subcategory !== null) {
-                        $categoryIds = [$subcategory->id];
-                        if ($subcategory->parent_id !== null) {
-                            $categoryIds[] = $subcategory->parent_id;
-                        }
-
-                        $product->categories()->syncWithoutDetaching($categoryIds);
-                    }
-
                     $variants = ProductVariant::factory()
                         ->count(fake()->numberBetween(2, 5))
                         ->recycle($product)
@@ -169,13 +164,13 @@ class DevelopmentTestingSeeder extends Seeder
                 ->count(fake()->numberBetween(1, 3))
                 ->create([
                     'product_id' => $product->id,
-                    'product_variant_id' => $variant->id,
+                    'variant_id' => $variant->id,
                     'is_primary' => false,
                 ]);
 
             ProductImage::factory()->create([
                 'product_id' => $product->id,
-                'product_variant_id' => $variant->id,
+                'variant_id' => $variant->id,
                 'is_primary' => true,
                 'sort_order' => 0,
             ]);

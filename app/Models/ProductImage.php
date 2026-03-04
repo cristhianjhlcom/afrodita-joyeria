@@ -16,9 +16,9 @@ class ProductImage extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'external_ref',
+        'external_id',
         'product_id',
-        'product_variant_id',
+        'variant_id',
         'url',
         'sort_order',
         'alt',
@@ -31,8 +31,9 @@ class ProductImage extends Model
     protected function casts(): array
     {
         return [
+            'external_id' => 'integer',
             'product_id' => 'integer',
-            'product_variant_id' => 'integer',
+            'variant_id' => 'integer',
             'sort_order' => 'integer',
             'is_primary' => 'boolean',
         ];
@@ -45,6 +46,6 @@ class ProductImage extends Model
 
     public function variant(): BelongsTo
     {
-        return $this->belongsTo(ProductVariant::class, 'product_variant_id');
+        return $this->belongsTo(ProductVariant::class, 'variant_id');
     }
 }

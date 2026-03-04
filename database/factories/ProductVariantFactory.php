@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ProductVariant>
@@ -22,7 +21,6 @@ class ProductVariantFactory extends Factory
 
         return [
             'external_id' => fake()->unique()->numberBetween(1, 999999),
-            'external_ref' => Str::lower((string) Str::uuid()),
             'product_id' => Product::factory(),
             'sku' => strtoupper(fake()->unique()->bothify('SKU-####')),
             'code' => strtoupper(fake()->unique()->bothify('VAR-####')),

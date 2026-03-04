@@ -18,7 +18,6 @@ class ProductVariant extends Model
      */
     protected $fillable = [
         'external_id',
-        'external_ref',
         'product_id',
         'sku',
         'code',
@@ -60,7 +59,7 @@ class ProductVariant extends Model
 
     public function images(): HasMany
     {
-        return $this->hasMany(ProductImage::class);
+        return $this->hasMany(ProductImage::class, 'variant_id');
     }
 
     public function formattedPrice(?string $currency = null): string

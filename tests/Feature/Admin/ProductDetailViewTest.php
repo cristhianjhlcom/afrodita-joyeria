@@ -28,7 +28,7 @@ it('renders product variants and images in admin product detail page', function 
 
     ProductImage::factory()->create([
         'product_id' => $product->id,
-        'product_variant_id' => $variant->id,
+        'variant_id' => $variant->id,
         'url' => 'https://cdn.example.com/ariel-ring-main.jpg',
         'is_primary' => true,
     ]);
