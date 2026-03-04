@@ -12,7 +12,7 @@ use App\Models\Province;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'home')->name('home');
+Route::livewire('/', 'pages::storefront.catalog')->name('home');
 
 Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
     ->prefix('admin')
