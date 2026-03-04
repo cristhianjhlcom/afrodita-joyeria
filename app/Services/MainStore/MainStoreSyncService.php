@@ -30,18 +30,34 @@ class MainStoreSyncService
     {
         return $this->syncResource('brands', function (array $items) use ($includeDisabled): int {
             $brands = collect($items)
-                ->map(function (array $item): array {
+                ->map(function (array $item): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    $name = (string) ($item['name'] ?? '');
+                    $slug = (string) ($item['slug'] ?? '');
+                    if ($slug === '') {
+                        $slug = Str::slug($name !== '' ? $name : "brand-{$externalId}");
+                    }
+
                     return [
-                        'external_id' => (int) $item['id'],
-                        'name' => (string) ($item['name'] ?? ''),
-                        'slug' => $item['slug'] ?? null,
+                        'external_id' => $externalId,
+                        'name' => $name,
+                        'slug' => $slug,
                         'is_active' => (bool) ($item['is_active'] ?? true),
                         'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
                         'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
                         'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
                     ];
                 })
+                ->filter()
                 ->values();
+
+            if ($brands->isEmpty()) {
+                return 0;
+            }
 
             Brand::query()->upsert(
                 $brands->all(),
@@ -146,9 +162,9 @@ class MainStoreSyncService
             $rows = collect();
             $variantRows = collect();
             $imageRows = collect();
-            $seenProductRefs = [];
-            $seenVariantRefs = [];
-            $seenImageRefs = [];
+            $seenProductExternalIds = [];
+            $seenVariantExternalIds = [];
+            $seenImageExternalIds = [];
 
             foreach ($items as $item) {
                 $brandId = $brandMap->get((int) ($item['brand_id'] ?? 0));
@@ -184,17 +200,15 @@ class MainStoreSyncService
                     continue;
                 }
 
-                $productExternalId = $this->resolveNumericExternalId($item['id'] ?? null);
-                $productExternalRef = $this->resolveExternalRef($item, "product:{$brandId}:".($item['slug'] ?? ''));
+                $productExternalId = $this->resolveProductExternalIdFromPayload($item, (int) $brandId, (int) $subcategoryId);
 
                 $rows->push([
                     'external_id' => $productExternalId,
-                    'external_ref' => $productExternalRef,
                     'brand_id' => (int) $brandId,
                     'category_id' => $categoryId,
                     'subcategory_id' => (int) $subcategoryId,
                     'name' => (string) ($item['name'] ?? ''),
-                    'slug' => (string) ($item['slug'] ?? "product-{$productExternalRef}"),
+                    'slug' => (string) ($item['slug'] ?? "product-{$productExternalId}"),
                     'description' => $item['description'] ?? null,
                     'status' => (string) ($item['status'] ?? Product::STATUS_DRAFT),
                     'sort_order' => (int) ($item['order'] ?? 0),
@@ -204,15 +218,15 @@ class MainStoreSyncService
                     'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
                     'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
                 ]);
-                $seenProductRefs[] = $productExternalRef;
+                $seenProductExternalIds[] = $productExternalId;
 
                 foreach ($this->normalizeUrlList(Arr::get($item, 'images', [])) as $imageIndex => $imageUrl) {
-                    $imageExternalRef = $this->resolveImageExternalRef("product:{$productExternalRef}", $imageUrl, $imageIndex);
+                    $imageExternalId = $this->resolveCatalogImageExternalId($productExternalId, $imageIndex, false);
 
                     $imageRows->push([
-                        'external_ref' => $imageExternalRef,
-                        'product_external_ref' => $productExternalRef,
-                        'variant_external_ref' => null,
+                        'external_id' => $imageExternalId,
+                        'product_external_id' => $productExternalId,
+                        'variant_external_id' => null,
                         'url' => $imageUrl,
                         'sort_order' => $imageIndex,
                         'is_primary' => $imageIndex === 0,
@@ -222,7 +236,7 @@ class MainStoreSyncService
                         'created_at' => now()->toDateTimeString(),
                     ]);
 
-                    $seenImageRefs[] = $imageExternalRef;
+                    $seenImageExternalIds[] = $imageExternalId;
                 }
 
                 foreach (($item['variants'] ?? []) as $variantIndex => $variant) {
@@ -230,16 +244,11 @@ class MainStoreSyncService
                         continue;
                     }
 
-                    $variantExternalId = $this->resolveNumericExternalId($variant['id'] ?? null);
-                    $variantExternalRef = $this->resolveExternalRef(
-                        $variant,
-                        "variant:{$productExternalRef}:".($variant['sku'] ?? $variant['code'] ?? "index-{$variantIndex}")
-                    );
+                    $variantExternalId = $this->resolveVariantExternalIdFromPayload($variant, $productExternalId, $variantIndex);
 
                     $variantRows->push([
                         'external_id' => $variantExternalId,
-                        'external_ref' => $variantExternalRef,
-                        'product_external_ref' => $productExternalRef,
+                        'product_external_id' => $productExternalId,
                         'sku' => $variant['sku'] ?? null,
                         'code' => $variant['code'] ?? null,
                         'price' => Arr::get($variant, 'price'),
@@ -257,16 +266,16 @@ class MainStoreSyncService
                         'created_at' => $this->normalizeTimestamp($variant['created_at'] ?? $item['created_at'] ?? null) ?? now()->toDateTimeString(),
                         'deleted_at' => $this->normalizeTimestamp($variant['deleted_at'] ?? null),
                     ]);
-                    $seenVariantRefs[] = $variantExternalRef;
+                    $seenVariantExternalIds[] = $variantExternalId;
 
                     $variantImageUrls = $this->normalizeVariantImageList($variant);
                     foreach ($variantImageUrls as $variantImageIndex => $variantImageUrl) {
-                        $imageExternalRef = $this->resolveImageExternalRef("variant:{$variantExternalRef}", $variantImageUrl, $variantImageIndex);
+                        $variantImageExternalId = $this->resolveCatalogImageExternalId($variantExternalId, $variantImageIndex, true);
 
                         $imageRows->push([
-                            'external_ref' => $imageExternalRef,
-                            'product_external_ref' => $productExternalRef,
-                            'variant_external_ref' => $variantExternalRef,
+                            'external_id' => $variantImageExternalId,
+                            'product_external_id' => $productExternalId,
+                            'variant_external_id' => $variantExternalId,
                             'url' => $variantImageUrl,
                             'sort_order' => $variantImageIndex,
                             'is_primary' => $variantImageIndex === 0,
@@ -276,12 +285,12 @@ class MainStoreSyncService
                             'created_at' => now()->toDateTimeString(),
                         ]);
 
-                        $seenImageRefs[] = $imageExternalRef;
+                        $seenImageExternalIds[] = $variantImageExternalId;
                     }
                 }
             }
 
-            $rows = $rows->unique('external_ref')->values();
+            $rows = $rows->unique('external_id')->values();
 
             if ($rows->isEmpty()) {
                 $seenProductsByToken[$token] ??= [];
@@ -293,78 +302,78 @@ class MainStoreSyncService
 
             Product::query()->upsert(
                 $rows->all(),
-                ['external_ref'],
-                ['external_id', 'brand_id', 'category_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'sort_order', 'url', 'remote_updated_at', 'deleted_at', 'updated_at', 'created_at'],
+                ['external_id'],
+                ['brand_id', 'category_id', 'subcategory_id', 'name', 'slug', 'description', 'status', 'sort_order', 'url', 'remote_updated_at', 'deleted_at', 'updated_at', 'created_at'],
             );
 
             if ($variantRows->isNotEmpty()) {
                 $productIdMap = Product::query()
-                    ->whereIn('external_ref', $rows->pluck('external_ref'))
-                    ->pluck('id', 'external_ref');
+                    ->whereIn('external_id', $rows->pluck('external_id'))
+                    ->pluck('id', 'external_id');
 
                 $preparedVariantRows = $variantRows
                     ->map(function (array $variantRow) use ($productIdMap): ?array {
-                        $productId = $productIdMap->get((string) $variantRow['product_external_ref']);
+                        $productId = $productIdMap->get((int) $variantRow['product_external_id']);
                         if ($productId === null) {
                             return null;
                         }
 
-                        return Arr::except($variantRow, ['product_external_ref']) + ['product_id' => $productId];
+                        return Arr::except($variantRow, ['product_external_id']) + ['product_id' => $productId];
                     })
                     ->filter()
-                    ->unique('external_ref')
+                    ->unique('external_id')
                     ->values();
 
                 if ($preparedVariantRows->isNotEmpty()) {
                     ProductVariant::query()->upsert(
                         $preparedVariantRows->all(),
-                        ['external_ref'],
-                        ['external_id', 'product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'stock_on_hand', 'stock_reserved', 'stock_available', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                        ['external_id'],
+                        ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'stock_on_hand', 'stock_reserved', 'stock_available', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
                     );
                 }
             }
 
             if ($imageRows->isNotEmpty()) {
                 $productIdMap = Product::query()
-                    ->whereIn('external_ref', $rows->pluck('external_ref'))
-                    ->pluck('id', 'external_ref');
+                    ->whereIn('external_id', $rows->pluck('external_id'))
+                    ->pluck('id', 'external_id');
                 $variantIdMap = ProductVariant::query()
-                    ->whereIn('external_ref', $variantRows->pluck('external_ref'))
-                    ->pluck('id', 'external_ref');
+                    ->whereIn('external_id', $variantRows->pluck('external_id'))
+                    ->pluck('id', 'external_id');
 
                 $preparedImageRows = $imageRows
                     ->map(function (array $imageRow) use ($productIdMap, $variantIdMap): ?array {
-                        $productId = $productIdMap->get((string) $imageRow['product_external_ref']);
+                        $productId = $productIdMap->get((int) $imageRow['product_external_id']);
                         if ($productId === null) {
                             return null;
                         }
 
                         $variantId = null;
-                        if ($imageRow['variant_external_ref'] !== null) {
-                            $variantId = $variantIdMap->get((string) $imageRow['variant_external_ref']);
+                        if ($imageRow['variant_external_id'] !== null) {
+                            $variantId = $variantIdMap->get((int) $imageRow['variant_external_id']);
                         }
 
-                        return Arr::except($imageRow, ['product_external_ref', 'variant_external_ref']) + [
+                        return Arr::except($imageRow, ['product_external_id', 'variant_external_id']) + [
                             'product_id' => $productId,
-                            'product_variant_id' => $variantId,
+                            'variant_id' => $variantId,
                         ];
                     })
                     ->filter()
-                    ->unique('external_ref')
+                    ->unique('external_id')
                     ->values();
 
                 if ($preparedImageRows->isNotEmpty()) {
                     ProductImage::query()->upsert(
                         $preparedImageRows->all(),
-                        ['external_ref'],
-                        ['product_id', 'product_variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'deleted_at', 'updated_at', 'created_at'],
+                        ['external_id'],
+                        ['product_id', 'variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'deleted_at', 'updated_at', 'created_at'],
                     );
                 }
             }
 
-            $seenProductsByToken[$token] = array_values(array_unique(array_merge($seenProductsByToken[$token] ?? [], $seenProductRefs)));
-            $seenVariantsByToken[$token] = array_values(array_unique(array_merge($seenVariantsByToken[$token] ?? [], $seenVariantRefs)));
-            $seenImagesByToken[$token] = array_values(array_unique(array_merge($seenImagesByToken[$token] ?? [], $seenImageRefs)));
+            $seenProductsByToken[$token] = array_values(array_unique(array_merge($seenProductsByToken[$token] ?? [], $seenProductExternalIds)));
+            $seenVariantsByToken[$token] = array_values(array_unique(array_merge($seenVariantsByToken[$token] ?? [], $seenVariantExternalIds)));
+            $seenImagesByToken[$token] = array_values(array_unique(array_merge($seenImagesByToken[$token] ?? [], $seenImageExternalIds)));
 
             return $rows->count();
         }, useCheckpoint: false, afterToken: function (string $token) use (&$seenProductsByToken, &$seenVariantsByToken, &$seenImagesByToken, &$scopedBrandsByToken): void {
@@ -384,18 +393,21 @@ class MainStoreSyncService
 
             $rows = collect($items)
                 ->map(function (array $item) use ($productMap): ?array {
-                    $productId = $productMap->get((int) ($item['product_id'] ?? 0));
+                    $productExternalId = $this->resolveNumericExternalId($item['product_id'] ?? null);
+                    if ($productExternalId === null) {
+                        return null;
+                    }
+
+                    $productId = $productMap->get($productExternalId);
 
                     if ($productId === null) {
                         return null;
                     }
 
-                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
-                    $externalRef = $this->resolveExternalRef($item, "variant:{$productId}:".($item['sku'] ?? $item['code'] ?? ''));
+                    $externalId = $this->resolveVariantExternalIdFromPayload($item, $productExternalId, 0);
 
                     return [
                         'external_id' => $externalId,
-                        'external_ref' => $externalRef,
                         'product_id' => $productId,
                         'sku' => $item['sku'] ?? null,
                         'code' => $item['code'] ?? null,
@@ -420,8 +432,8 @@ class MainStoreSyncService
 
             ProductVariant::query()->upsert(
                 $rows->all(),
-                ['external_ref'],
-                ['external_id', 'product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                ['external_id'],
+                ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
@@ -436,6 +448,11 @@ class MainStoreSyncService
 
             $rows = collect($items)
                 ->map(function (array $item) use ($productMap, $variantMap): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
                     $productId = $productMap->get((int) ($item['product_id'] ?? 0));
 
                     if ($productId === null) {
@@ -448,9 +465,9 @@ class MainStoreSyncService
                     }
 
                     return [
-                        'external_ref' => $this->resolveExternalRef($item, "image:{$productId}:".($variantId ?? 'none').':'.((string) ($item['url'] ?? ''))),
+                        'external_id' => $externalId,
                         'product_id' => $productId,
-                        'product_variant_id' => $variantId,
+                        'variant_id' => $variantId,
                         'url' => (string) ($item['url'] ?? ''),
                         'sort_order' => (int) ($item['sort_order'] ?? 0),
                         'alt' => $item['alt'] ?? null,
@@ -469,8 +486,8 @@ class MainStoreSyncService
 
             ProductImage::query()->upsert(
                 $rows->all(),
-                ['external_ref'],
-                ['product_id', 'product_variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'updated_at', 'created_at', 'deleted_at'],
+                ['external_id'],
+                ['product_id', 'variant_id', 'url', 'sort_order', 'alt', 'is_primary', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
@@ -481,19 +498,71 @@ class MainStoreSyncService
     {
         return $this->syncResource('inventory', function (array $items): int {
             $variantMap = ProductVariant::query()->pluck('id', 'external_id');
+            if ($variantMap->isEmpty()) {
+                return 0;
+            }
+
+            $usesExplicitStockFields = collect($items)
+                ->contains(fn (array $item): bool => array_key_exists('stock_on_hand', $item) || array_key_exists('stock_available', $item));
+
+            if ($usesExplicitStockFields) {
+                $updated = 0;
+
+                foreach ($items as $item) {
+                    $variantId = $variantMap->get((int) ($item['variant_id'] ?? 0));
+                    if ($variantId === null) {
+                        continue;
+                    }
+
+                    ProductVariant::query()->whereKey($variantId)->update([
+                        'stock_on_hand' => (int) ($item['stock_on_hand'] ?? 0),
+                        'stock_reserved' => (int) ($item['stock_reserved'] ?? 0),
+                        'stock_available' => (int) ($item['stock_available'] ?? 0),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    ]);
+
+                    $updated++;
+                }
+
+                return $updated;
+            }
+
+            $aggregatedByVariant = collect($items)
+                ->map(function (array $item): ?array {
+                    $variantExternalId = $this->resolveNumericExternalId($item['variant_id'] ?? null);
+                    if ($variantExternalId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'variant_external_id' => $variantExternalId,
+                        'amount' => (int) ($item['amount'] ?? 0),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->groupBy('variant_external_id');
+
             $updated = 0;
 
-            foreach ($items as $item) {
-                $variantId = $variantMap->get((int) ($item['variant_id'] ?? 0));
+            foreach ($aggregatedByVariant as $variantExternalId => $entries) {
+                $variantId = $variantMap->get((int) $variantExternalId);
                 if ($variantId === null) {
                     continue;
                 }
 
+                $stockOnHand = (int) collect($entries)->sum('amount');
+                $latestUpdatedAt = collect($entries)
+                    ->pluck('updated_at')
+                    ->filter(fn (mixed $value): bool => is_string($value) && $value !== '')
+                    ->sortDesc()
+                    ->first();
+
                 ProductVariant::query()->whereKey($variantId)->update([
-                    'stock_on_hand' => (int) ($item['stock_on_hand'] ?? 0),
-                    'stock_reserved' => (int) ($item['stock_reserved'] ?? 0),
-                    'stock_available' => (int) ($item['stock_available'] ?? 0),
-                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'stock_on_hand' => $stockOnHand,
+                    'stock_reserved' => 0,
+                    'stock_available' => $stockOnHand,
+                    'updated_at' => is_string($latestUpdatedAt) ? $latestUpdatedAt : now()->toDateTimeString(),
                 ]);
 
                 $updated++;
@@ -1363,15 +1432,29 @@ class MainStoreSyncService
     protected function upsertCategories(array $items, string $parentReferenceField): int
     {
         $rows = collect($items)
-            ->map(fn (array $item): array => [
-                'external_id' => (int) $item['id'],
-                'name' => (string) ($item['name'] ?? ''),
-                'slug' => $item['slug'] ?? null,
-                'is_active' => (bool) ($item['is_active'] ?? true),
-                'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
-                'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
-                'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
-            ])
+            ->map(function (array $item): ?array {
+                $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                if ($externalId === null) {
+                    return null;
+                }
+
+                $name = (string) ($item['name'] ?? '');
+                $slug = (string) ($item['slug'] ?? '');
+                if ($slug === '') {
+                    $slug = Str::slug($name !== '' ? $name : "category-{$externalId}");
+                }
+
+                return [
+                    'external_id' => $externalId,
+                    'name' => $name,
+                    'slug' => $slug,
+                    'is_active' => (bool) ($item['is_active'] ?? true),
+                    'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                ];
+            })
+            ->filter()
             ->values();
 
         if ($rows->isEmpty()) {
@@ -1533,9 +1616,9 @@ class MainStoreSyncService
         }
 
         $created = Category::query()->create([
-            'external_id' => null,
+            'external_id' => $this->resolveSyntheticExternalId("subcategory:{$slug}:{$name}"),
             'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
-            'slug' => $slug !== '' ? $slug : null,
+            'slug' => $slug !== '' ? $slug : Str::slug($name),
             'is_active' => true,
             'parent_id' => $parentCategoryId,
         ]);
@@ -1581,9 +1664,9 @@ class MainStoreSyncService
         }
 
         $created = Category::query()->create([
-            'external_id' => null,
+            'external_id' => $this->resolveSyntheticExternalId("category:{$slug}:{$name}"),
             'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
-            'slug' => $slug !== '' ? $slug : null,
+            'slug' => $slug !== '' ? $slug : Str::slug($name),
             'is_active' => true,
             'parent_id' => null,
         ]);
@@ -1605,19 +1688,49 @@ class MainStoreSyncService
     /**
      * @param  array<string, mixed>  $item
      */
-    protected function resolveExternalRef(array $item, string $fallbackKey): string
+    protected function resolveProductExternalIdFromPayload(array $item, int $brandId, int $subcategoryId): int
     {
-        $numericId = $this->resolveNumericExternalId(Arr::get($item, 'id'));
+        $numericId = $this->resolveNumericExternalId($item['id'] ?? null);
         if ($numericId !== null) {
-            return "id:{$numericId}";
+            return $numericId;
         }
 
-        return 'h:'.hash('sha256', $fallbackKey);
+        $slug = (string) ($item['slug'] ?? '');
+        $name = (string) ($item['name'] ?? '');
+
+        return $this->resolveSyntheticExternalId("product:{$brandId}:{$subcategoryId}:{$slug}:{$name}");
     }
 
-    protected function resolveImageExternalRef(string $ownerRef, string $url, int $sortOrder): string
+    /**
+     * @param  array<string, mixed>  $variant
+     */
+    protected function resolveVariantExternalIdFromPayload(array $variant, int $productExternalId, int $variantIndex): int
     {
-        return 'img:'.hash('sha256', "{$ownerRef}|{$sortOrder}|{$url}");
+        $numericId = $this->resolveNumericExternalId($variant['id'] ?? null);
+        if ($numericId !== null) {
+            return $numericId;
+        }
+
+        $sku = (string) ($variant['sku'] ?? '');
+        $code = (string) ($variant['code'] ?? '');
+        $color = (string) ($variant['color'] ?? '');
+        $size = (string) ($variant['size'] ?? '');
+
+        return $this->resolveSyntheticExternalId("variant:{$productExternalId}:{$variantIndex}:{$sku}:{$code}:{$color}:{$size}");
+    }
+
+    protected function resolveSyntheticExternalId(string $seed): int
+    {
+        $candidate = (int) base_convert(substr(hash('sha256', $seed), 0, 15), 16, 10);
+
+        return max(1, $candidate);
+    }
+
+    protected function resolveCatalogImageExternalId(int $ownerExternalId, int $sortOrder, bool $isVariant): int
+    {
+        $prefix = $isVariant ? 2_000_000_000_000_000 : 1_000_000_000_000_000;
+
+        return $prefix + ($ownerExternalId * 1_000) + $sortOrder + 1;
     }
 
     /**
@@ -1703,15 +1816,15 @@ class MainStoreSyncService
 
     /**
      * @param  list<int>  $scopedBrandIds
-     * @param  list<string>  $seenProductRefs
-     * @param  list<string>  $seenVariantRefs
-     * @param  list<string>  $seenImageRefs
+     * @param  list<int>  $seenProductExternalIds
+     * @param  list<int>  $seenVariantExternalIds
+     * @param  list<int>  $seenImageExternalIds
      */
     protected function softDeleteMissingCatalogRecords(
         array $scopedBrandIds,
-        array $seenProductRefs,
-        array $seenVariantRefs,
-        array $seenImageRefs
+        array $seenProductExternalIds,
+        array $seenVariantExternalIds,
+        array $seenImageExternalIds
     ): void {
         if ($scopedBrandIds === []) {
             return;
@@ -1722,8 +1835,8 @@ class MainStoreSyncService
         $productQuery = Product::query()
             ->whereIn('brand_id', $scopedBrandIds)
             ->whereNull('deleted_at');
-        if ($seenProductRefs !== []) {
-            $productQuery->whereNotIn('external_ref', $seenProductRefs);
+        if ($seenProductExternalIds !== []) {
+            $productQuery->whereNotIn('external_id', $seenProductExternalIds);
         }
         $productQuery->update([
             'deleted_at' => now(),
@@ -1733,8 +1846,8 @@ class MainStoreSyncService
         $variantQuery = ProductVariant::query()
             ->whereIn('product_id', $scopedProductIds)
             ->whereNull('deleted_at');
-        if ($seenVariantRefs !== []) {
-            $variantQuery->whereNotIn('external_ref', $seenVariantRefs);
+        if ($seenVariantExternalIds !== []) {
+            $variantQuery->whereNotIn('external_id', $seenVariantExternalIds);
         }
         $variantQuery->update([
             'deleted_at' => now(),
@@ -1744,8 +1857,8 @@ class MainStoreSyncService
         $imageQuery = ProductImage::query()
             ->whereIn('product_id', $scopedProductIds)
             ->whereNull('deleted_at');
-        if ($seenImageRefs !== []) {
-            $imageQuery->whereNotIn('external_ref', $seenImageRefs);
+        if ($seenImageExternalIds !== []) {
+            $imageQuery->whereNotIn('external_id', $seenImageExternalIds);
         }
         $imageQuery->update([
             'deleted_at' => now(),

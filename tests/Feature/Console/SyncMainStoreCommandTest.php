@@ -502,6 +502,7 @@ it('syncs products from nested external payload without numeric ids', function (
         'https://main-store.test/api/v1/sync/products*' => Http::response([
             'data' => [
                 [
+                    'id' => 9502,
                     'name' => 'Prueba 02',
                     'slug' => 'producto-de-prueba-02',
                     'description' => '<p>Demo</p>',
@@ -517,6 +518,7 @@ it('syncs products from nested external payload without numeric ids', function (
                     ],
                     'variants' => [
                         [
+                            'id' => 9703,
                             'sku' => 'TEST003',
                             'price' => 2990,
                             'sale_price' => 16999,
@@ -570,6 +572,7 @@ it('stores payload order url and normalized product and variant images', functio
     Http::fake([
         'https://main-store.test/api/v1/sync/products*' => Http::response([
             'data' => [[
+                'id' => 9602,
                 'name' => 'Prueba 02',
                 'slug' => 'producto-de-prueba-02',
                 'description' => '<p>Demo</p>',
@@ -584,6 +587,7 @@ it('stores payload order url and normalized product and variant images', functio
                 'category' => ['name' => 'Anillos'],
                 'subcategory' => ['name' => 'Anillos con Figuras'],
                 'variants' => [[
+                    'id' => 9803,
                     'sku' => 'TEST003',
                     'price' => 2990,
                     'sale_price' => 16999,
@@ -613,7 +617,7 @@ it('stores payload order url and normalized product and variant images', functio
     expect($product->url)->toContain('/producto-de-prueba-02');
     expect($variant->primary_image_url)->toContain('/variants/v-1.webp');
     expect(ProductImage::query()->where('product_id', $product->id)->count())->toBe(4);
-    expect(ProductImage::query()->where('product_variant_id', $variant->id)->exists())->toBeTrue();
+    expect(ProductImage::query()->where('variant_id', $variant->id)->exists())->toBeTrue();
 });
 
 it('soft deletes missing products for the token scoped brand', function () {
@@ -643,6 +647,7 @@ it('soft deletes missing products for the token scoped brand', function () {
         'https://main-store.test/api/v1/sync/products*' => Http::sequence()
             ->push([
                 'data' => [[
+                    'id' => 9901,
                     'name' => 'Producto Activo',
                     'slug' => 'producto-activo',
                     'status' => 'published',
@@ -687,6 +692,7 @@ it('does not duplicate subcategory creation when same slug appears in one produc
         'https://main-store.test/api/v1/sync/products*' => Http::response([
             'data' => [
                 [
+                    'id' => 9101,
                     'name' => 'P1',
                     'slug' => 'p1',
                     'status' => 'published',
@@ -697,6 +703,7 @@ it('does not duplicate subcategory creation when same slug appears in one produc
                     'updated_at' => now()->toIso8601String(),
                 ],
                 [
+                    'id' => 9102,
                     'name' => 'P2',
                     'slug' => 'p2',
                     'status' => 'published',
@@ -744,6 +751,7 @@ it('does not soft delete products from earlier pages in the same sync run', func
             ->push([
                 'data' => [
                     [
+                        'id' => 9201,
                         'name' => 'P1',
                         'slug' => 'p1',
                         'status' => 'published',
@@ -754,6 +762,7 @@ it('does not soft delete products from earlier pages in the same sync run', func
                         'updated_at' => now()->toIso8601String(),
                     ],
                     [
+                        'id' => 9202,
                         'name' => 'P2',
                         'slug' => 'p2',
                         'status' => 'published',
@@ -769,6 +778,7 @@ it('does not soft delete products from earlier pages in the same sync run', func
             ->push([
                 'data' => [
                     [
+                        'id' => 9203,
                         'name' => 'P3',
                         'slug' => 'p3',
                         'status' => 'published',
@@ -787,4 +797,98 @@ it('does not soft delete products from earlier pages in the same sync run', func
 
     expect(Product::query()->count())->toBe(3);
     expect(Product::query()->whereNotNull('deleted_at')->count())->toBe(0);
+});
+
+it('syncs products and nested variants even when ids are missing in products payload', function () {
+    $brand = Brand::factory()->create([
+        'external_id' => 10,
+        'name' => 'Afrodita',
+        'slug' => 'afrodita',
+    ]);
+
+    $category = Category::factory()->create([
+        'external_id' => 200,
+        'name' => 'Accesorios',
+        'slug' => 'accesorios',
+    ]);
+
+    $subcategory = Category::factory()->create([
+        'external_id' => 201,
+        'name' => 'Accesorios para el Cabello',
+        'slug' => 'accesorios-para-el-cabello',
+        'parent_id' => $category->id,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|afrodita-token',
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [[
+                'name' => 'Producto Sin ID',
+                'slug' => 'producto-sin-id',
+                'status' => 'published',
+                'brand' => ['name' => 'Afrodita'],
+                'category' => ['name' => 'Accesorios'],
+                'subcategory' => ['name' => 'Accesorios para el Cabello'],
+                'variants' => [[
+                    'sku' => 'NO-ID-SKU',
+                    'price' => 2990,
+                    'sale_price' => 1990,
+                    'color' => 'Negro',
+                    'size' => 'T/U',
+                    'stock' => 12,
+                    'in_stock' => true,
+                ]],
+                'updated_at' => now()->toIso8601String(),
+            ]],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    $product = Product::query()->where('slug', 'producto-sin-id')->firstOrFail();
+    $variant = ProductVariant::query()->where('sku', 'NO-ID-SKU')->firstOrFail();
+
+    expect($product->brand_id)->toBe($brand->id);
+    expect($product->subcategory_id)->toBe($subcategory->id);
+    expect($variant->product_id)->toBe($product->id);
+    expect($product->external_id)->toBeInt()->toBeGreaterThan(0);
+    expect($variant->external_id)->toBeInt()->toBeGreaterThan(0);
+});
+
+it('syncs inventory from stocks amount entries by aggregating totals per variant', function () {
+    $product = Product::factory()->create([
+        'external_id' => 501,
+    ]);
+
+    $variant = ProductVariant::factory()->create([
+        'external_id' => 701,
+        'product_id' => $product->id,
+        'stock_on_hand' => 0,
+        'stock_reserved' => 0,
+        'stock_available' => 0,
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/stocks*' => Http::response([
+            'data' => [
+                ['variant_id' => 701, 'amount' => 5, 'updated_at' => now()->subMinute()->toIso8601String()],
+                ['variant_id' => 701, 'amount' => -2, 'updated_at' => now()->toIso8601String()],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'inventory'])->assertSuccessful();
+
+    $variant->refresh();
+
+    expect($variant->stock_on_hand)->toBe(3);
+    expect($variant->stock_reserved)->toBe(0);
+    expect($variant->stock_available)->toBe(3);
 });
