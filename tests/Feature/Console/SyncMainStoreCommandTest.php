@@ -507,6 +507,10 @@ it('syncs products from nested external payload without numeric ids', function (
                     'slug' => 'producto-de-prueba-02',
                     'description' => '<p>Demo</p>',
                     'status' => 'draft',
+                    'images' => [
+                        'http://localhost:8000/storage/public/products/p-1.webp',
+                        'http://localhost:8000/storage/public/products/p-2.webp',
+                    ],
                     'brand' => [
                         'name' => 'AFRODITA',
                     ],
@@ -525,6 +529,9 @@ it('syncs products from nested external payload without numeric ids', function (
                             'color' => 'Rubi',
                             'hex' => '#e0115f',
                             'size' => '8',
+                            'images' => [
+                                'http://localhost:8000/storage/public/variants/v-1.webp',
+                            ],
                             'stock' => 15,
                             'in_stock' => true,
                         ],
@@ -544,6 +551,8 @@ it('syncs products from nested external payload without numeric ids', function (
     expect($product->brand_id)->toBe($brand->id);
     expect($variant->product_id)->toBe($product->id);
     expect($variant->stock_available)->toBe(15);
+    expect(ProductImage::query()->where('product_id', $product->id)->count())->toBe(3);
+    expect(ProductImage::query()->where('variant_id', $variant->id)->exists())->toBeTrue();
 });
 
 it('stores payload order url and normalized product and variant images', function () {

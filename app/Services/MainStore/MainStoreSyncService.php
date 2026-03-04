@@ -1721,16 +1721,16 @@ class MainStoreSyncService
 
     protected function resolveSyntheticExternalId(string $seed): int
     {
-        $candidate = (int) base_convert(substr(hash('sha256', $seed), 0, 15), 16, 10);
+        $candidate = hexdec(substr(hash('sha256', $seed), 0, 12));
 
         return max(1, $candidate);
     }
 
     protected function resolveCatalogImageExternalId(int $ownerExternalId, int $sortOrder, bool $isVariant): int
     {
-        $prefix = $isVariant ? 2_000_000_000_000_000 : 1_000_000_000_000_000;
+        $ownerType = $isVariant ? 'variant' : 'product';
 
-        return $prefix + ($ownerExternalId * 1_000) + $sortOrder + 1;
+        return $this->resolveSyntheticExternalId("image:{$ownerType}:{$ownerExternalId}:{$sortOrder}");
     }
 
     /**
