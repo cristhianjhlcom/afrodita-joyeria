@@ -147,6 +147,7 @@ new class extends Component {
                 'subcategory:id,name,parent_id',
                 'images' => fn ($query) => $query
                     ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
+                    ->whereNull('variant_id')
                     ->orderByDesc('is_primary')
                     ->orderBy('sort_order'),
                 'variants' => fn ($query) => $query
@@ -292,7 +293,11 @@ new class extends Component {
                                     alt="{{ $product->name }}"
                                     class="h-full w-full object-cover"
                                     loading="lazy"
+                                    onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');"
                                 >
+                                <div class="hidden h-full items-center justify-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                                    {{ __('No image') }}
+                                </div>
                             @else
                                 <div class="flex h-full items-center justify-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
                                     {{ __('No image') }}

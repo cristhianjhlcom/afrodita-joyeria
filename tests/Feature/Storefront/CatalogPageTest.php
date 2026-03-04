@@ -204,3 +204,38 @@ it('falls back to all products when filters return no results', function () {
         ->assertSee('Open Catalog Ring')
         ->assertSee('Open Catalog Necklace');
 });
+
+it('renders product card image from product images and not variant images', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Image Source Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    $variant = ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12500,
+        'is_active' => true,
+    ]);
+
+    ProductImage::factory()->create([
+        'product_id' => $product->id,
+        'variant_id' => $variant->id,
+        'url' => 'https://cdn.test/variant-image.png',
+        'is_primary' => true,
+    ]);
+
+    ProductImage::factory()->create([
+        'product_id' => $product->id,
+        'variant_id' => null,
+        'url' => 'https://cdn.test/product-image.png',
+        'is_primary' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee('https://cdn.test/product-image.png', false)
+        ->assertDontSee('https://cdn.test/variant-image.png', false);
+});
