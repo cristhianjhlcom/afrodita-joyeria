@@ -269,3 +269,48 @@ it('prioritizes featured image over synced product images in catalog cards', fun
         ->assertSee('https://cdn.test/featured-image.png', false)
         ->assertDontSee('https://cdn.test/fallback-product-image.png', false);
 });
+
+it('renders shared storefront header navigation and footer on catalog route', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Shared Layout Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12500,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee(config('app.name'))
+        ->assertSee('Catalog')
+        ->assertSee('0')
+        ->assertSee('Quick Links')
+        ->assertSee('Customer Care');
+});
+
+it('renders visual product card actions for view and add to cart', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Action Buttons Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12900,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee('Ver')
+        ->assertSee('Agregar');
+});
