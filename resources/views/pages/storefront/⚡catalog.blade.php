@@ -226,8 +226,8 @@ new class extends Component {
         <p class="text-sm text-zinc-600 dark:text-zinc-300">{{ __('Browse synced products from the main store.') }}</p>
     </header>
 
-    <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside class="space-y-6 rounded-sm border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+    <div class="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside class="self-start space-y-6 rounded-sm border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
             <div class="space-y-2">
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Search') }}</h2>
                 <input
@@ -334,6 +334,23 @@ new class extends Component {
                                 @else
                                     <span class="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">{{ __('Out of stock') }}</span>
                                 @endif
+                            </div>
+
+                            <div class="flex items-center gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                                >
+                                    <flux:icon.eye class="size-3.5" />
+                                    <span>{{ __('Ver') }}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                                >
+                                    <flux:icon.shopping-bag class="size-3.5" />
+                                    <span>{{ __('Agregar') }}</span>
+                                </button>
                             </div>
                         </div>
                     </article>
