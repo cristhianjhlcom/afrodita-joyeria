@@ -68,7 +68,7 @@ it('shows all products when no search or filters are applied', function () {
 it('paginates products on storefront grid', function () {
     $subcategory = Category::factory()->create();
 
-    foreach (range(1, 13) as $index) {
+    foreach (range(1, 21) as $index) {
         $product = Product::factory()->create([
             'name' => "Catalog Product {$index}",
             'subcategory_id' => $subcategory->id,
@@ -86,7 +86,7 @@ it('paginates products on storefront grid', function () {
     $this->get(route('home', ['page' => 2]))
         ->assertSuccessful()
         ->assertSee('Catalog Product 1')
-        ->assertDontSee('Catalog Product 13');
+        ->assertDontSee('Catalog Product 21');
 });
 
 it('filters catalog by search term', function () {

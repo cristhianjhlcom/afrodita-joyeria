@@ -177,12 +177,12 @@ new class extends Component {
         if ($hasActiveFilters && ! (clone $filteredQuery)->exists()) {
             return $baseQuery
                 ->latest('updated_at')
-                ->paginate(12);
+                ->paginate(20);
         }
 
         return $filteredQuery
             ->latest('updated_at')
-            ->paginate(12);
+            ->paginate(20);
     }
 
     public function productCardPrice(Product $product): ?int
