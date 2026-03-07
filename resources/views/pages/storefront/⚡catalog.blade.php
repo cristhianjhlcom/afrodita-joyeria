@@ -227,7 +227,7 @@ new class extends Component {
     </header>
 
     <div class="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside class="self-start space-y-6 rounded-sm border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <aside class="self-start space-y-6 rounded-sm border border-zinc-200 bg-white p-4 lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:overflow-auto dark:border-zinc-700 dark:bg-zinc-900">
             <div class="space-y-2">
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Search') }}</h2>
                 <input
