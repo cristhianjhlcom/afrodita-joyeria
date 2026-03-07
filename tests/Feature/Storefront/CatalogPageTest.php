@@ -269,3 +269,64 @@ it('prioritizes featured image over synced product images in catalog cards', fun
         ->assertSee('https://cdn.test/featured-image.png', false)
         ->assertDontSee('https://cdn.test/fallback-product-image.png', false);
 });
+
+it('renders shared storefront header navigation and footer on catalog route', function () {
+    $parentCategory = Category::factory()->create([
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+        'parent_id' => null,
+        'is_active' => true,
+    ]);
+
+    $subcategory = Category::factory()->create([
+        'parent_id' => $parentCategory->id,
+    ]);
+
+    $product = Product::factory()->create([
+        'name' => 'Shared Layout Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12500,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee(config('app.name'))
+        ->assertSee('Iniciar sesión')
+        ->assertSee('Todo')
+        ->assertSee('Anillos')
+        ->assertSee('Catalog')
+        ->assertSee('name="q"', false)
+        ->assertSee('type="search"', false)
+        ->assertSee('sticky top-0', false)
+        ->assertSee('0')
+        ->assertSee('Compras')
+        ->assertSee('Atención al cliente')
+        ->assertSee('Legal');
+});
+
+it('renders visual product card actions for view and add to cart', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Action Buttons Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12900,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertSuccessful()
+        ->assertSee('Ver')
+        ->assertSee('Agregar');
+});
