@@ -310,7 +310,7 @@ it('renders shared storefront header navigation and footer on catalog route', fu
         ->assertSee('Legal');
 });
 
-it('renders visual product card actions for view and add to cart', function () {
+it('renders visual product card actions for view and add to cart with clickable detail link', function () {
     $subcategory = Category::factory()->create();
 
     $product = Product::factory()->create([
@@ -328,5 +328,6 @@ it('renders visual product card actions for view and add to cart', function () {
     $this->get(route('home'))
         ->assertSuccessful()
         ->assertSee('Ver')
-        ->assertSee('Agregar');
+        ->assertSee('Agregar')
+        ->assertSee(route('storefront.products.show', $product), false);
 });

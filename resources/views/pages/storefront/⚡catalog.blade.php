@@ -295,7 +295,16 @@ new class extends Component {
         <div class="space-y-6">
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 @forelse ($this->products as $product)
-                    <article class="overflow-hidden rounded-sm border border-zinc-200 bg-white transition dark:border-zinc-700 dark:bg-zinc-900">
+                    @php($productDetailUrl = route('storefront.products.show', $product))
+                    <article
+                        class="overflow-hidden rounded-sm border border-zinc-200 bg-white transition hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500"
+                        role="link"
+                        tabindex="0"
+                        x-data
+                        x-on:click="window.location.href = '{{ $productDetailUrl }}'"
+                        x-on:keydown.enter.prevent="window.location.href = '{{ $productDetailUrl }}'"
+                        x-on:keydown.space.prevent="window.location.href = '{{ $productDetailUrl }}'"
+                    >
                         <div class="aspect-square overflow-hidden rounded-sm border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
                             @if ($this->productCardImageUrl($product))
                                 <img
@@ -337,15 +346,18 @@ new class extends Component {
                             </div>
 
                             <div class="flex items-center gap-2 pt-1">
-                                <button
-                                    type="button"
+                                <a
+                                    href="{{ $productDetailUrl }}"
+                                    wire:navigate
+                                    x-on:click.stop
                                     class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
                                 >
                                     <flux:icon.eye class="size-3.5" />
                                     <span>{{ __('Ver') }}</span>
-                                </button>
+                                </a>
                                 <button
                                     type="button"
+                                    x-on:click.stop
                                     class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
                                 >
                                     <flux:icon.shopping-bag class="size-3.5" />
