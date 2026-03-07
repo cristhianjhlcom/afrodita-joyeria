@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
@@ -15,9 +16,30 @@ class Order extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'order_token',
+        'source',
+        'user_id',
         'external_id',
         'main_store_external_order_id',
         'external_customer_id',
+        'customer_name',
+        'customer_email',
+        'customer_phone',
+        'customer_document_type',
+        'customer_document_number',
+        'shipping_country_id',
+        'shipping_department_id',
+        'shipping_province_id',
+        'shipping_district_id',
+        'shipping_address_line',
+        'shipping_reference',
+        'shipping_method',
+        'payment_gateway',
+        'payment_status',
+        'payment_reference',
+        'payment_error_code',
+        'payment_error_message',
+        'paid_at',
         'status',
         'currency',
         'subtotal',
@@ -36,16 +58,27 @@ class Order extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'external_id' => 'integer',
             'external_customer_id' => 'integer',
+            'shipping_country_id' => 'integer',
+            'shipping_department_id' => 'integer',
+            'shipping_province_id' => 'integer',
+            'shipping_district_id' => 'integer',
             'subtotal' => 'integer',
             'discount_total' => 'integer',
             'shipping_total' => 'integer',
             'tax_total' => 'integer',
             'grand_total' => 'integer',
             'placed_at' => 'datetime',
+            'paid_at' => 'datetime',
             'is_refunded' => 'boolean',
         ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function items(): HasMany

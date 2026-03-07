@@ -57,11 +57,6 @@ new class extends Component
         $this->dispatch('cart-updated');
     }
 
-    public function processPurchase(): void
-    {
-        $this->applyResult(app(CartService::class)->processPurchase());
-    }
-
     /**
      * @param  array{ok: bool, message: string, code: string}  $result
      */
@@ -94,17 +89,27 @@ new class extends Component
         <div class="space-y-3">
             @forelse ($this->cartItems as $item)
                 @php($variant = $item['variant'])
+                @php($imageUrl = $variant->primary_image_url ?: $variant->product?->featured_image)
                 <article wire:key="cart-page-item-{{ $item['variant_id'] }}" class="space-y-3 rounded-sm border border-slate-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-                    <div class="space-y-1">
-                        <h2 class="text-base font-semibold text-slate-900 dark:text-zinc-100">{{ $variant->product?->name ?? __('Product') }}</h2>
-                        <p class="text-xs text-slate-500 dark:text-zinc-400">
-                            {{ __('Size') }}: {{ $variant->size ?: __('One Size') }}
-                            <span>·</span>
-                            {{ __('Color') }}: {{ $variant->color ?: __('Default') }}
-                        </p>
-                        <p class="text-xs {{ $item['stock_available'] > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400' }}">
-                            {{ __('Stock available: :stock', ['stock' => $item['stock_available']]) }}
-                        </p>
+                    <div class="flex gap-3">
+                        <div class="size-20 shrink-0 overflow-hidden rounded-sm border border-slate-200 bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800">
+                            @if ($imageUrl)
+                                <img src="{{ $imageUrl }}" alt="{{ $variant->product?->name ?? __('Product') }}" class="h-full w-full object-cover" loading="lazy">
+                            @else
+                                <div class="flex h-full w-full items-center justify-center text-[11px] font-semibold text-slate-500 dark:text-zinc-400">{{ __('No image') }}</div>
+                            @endif
+                        </div>
+                        <div class="space-y-1">
+                            <h2 class="text-base font-semibold text-slate-900 dark:text-zinc-100">{{ $variant->product?->name ?? __('Product') }}</h2>
+                            <p class="text-xs text-slate-500 dark:text-zinc-400">
+                                {{ __('Size') }}: {{ $variant->size ?: __('One Size') }}
+                                <span>·</span>
+                                {{ __('Color') }}: {{ $variant->color ?: __('Default') }}
+                            </p>
+                            <p class="text-xs {{ $item['stock_available'] > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400' }}">
+                                {{ __('Stock available: :stock', ['stock' => $item['stock_available']]) }}
+                            </p>
+                        </div>
                     </div>
 
                     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -136,9 +141,10 @@ new class extends Component
                             <button
                                 type="button"
                                 wire:click="removeItem({{ $item['variant_id'] }})"
-                                class="inline-flex min-h-10 items-center rounded-sm border border-rose-300 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20"
+                                class="inline-flex size-10 items-center justify-center rounded-sm border border-rose-300 text-rose-700 transition hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20"
+                                aria-label="{{ __('Remove item') }}"
                             >
-                                {{ __('Remove') }}
+                                <flux:icon.trash class="size-4" />
                             </button>
                         </div>
                     </div>
@@ -167,14 +173,14 @@ new class extends Component
             </div>
 
             <div class="space-y-2 pt-2">
-                <button
-                    type="button"
-                    wire:click="processPurchase"
+                <a
+                    href="{{ route('storefront.checkout.show') }}"
+                    wire:navigate
                     class="inline-flex min-h-11 w-full items-center justify-center rounded-sm border border-amber-300 bg-amber-300 px-4 text-sm font-semibold text-slate-900 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
                     @disabled($this->cartSummary['items_count'] === 0)
                 >
-                    {{ __('Process purchase') }}
-                </button>
+                    {{ __('Go to checkout') }}
+                </a>
                 <button
                     type="button"
                     wire:click="clearCart"

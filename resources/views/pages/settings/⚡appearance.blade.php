@@ -1,9 +1,15 @@
 <?php
 
+use Illuminate\View\View;
 use Livewire\Component;
 
 new class extends Component {
-    //
+    public function rendering(View $view): void
+    {
+        $view->layout('layouts.storefront', [
+            'title' => __('Appearance').' | '.config('app.name'),
+        ]);
+    }
 }; ?>
 
 <section class="w-full">

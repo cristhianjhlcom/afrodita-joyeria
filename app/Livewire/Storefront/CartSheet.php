@@ -43,11 +43,6 @@ class CartSheet extends Component
         $this->dispatch('cart-updated');
     }
 
-    public function processPurchase(): void
-    {
-        $this->applyResult(app(CartService::class)->processPurchase());
-    }
-
     #[On('cart-updated')]
     public function refreshCart(): void {}
 

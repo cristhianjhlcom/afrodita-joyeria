@@ -26,7 +26,8 @@ it('renders cart badge count and view cart action in cart sheet component', func
 
     Livewire::test(CartSheet::class)
         ->assertSee('2')
-        ->assertSee(route('storefront.cart.show'));
+        ->assertSee(route('storefront.cart.show'))
+        ->assertSee(route('storefront.checkout.show'));
 });
 
 it('updates quantities and clears cart through cart sheet actions', function () {

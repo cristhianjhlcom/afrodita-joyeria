@@ -5,6 +5,7 @@ use Laravel\Fortify\Actions\DisableTwoFactorAuthentication;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Illuminate\View\View;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -43,6 +44,13 @@ new class extends Component {
 
         $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
         $this->requiresConfirmation = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
+    }
+
+    public function rendering(View $view): void
+    {
+        $view->layout('layouts.storefront', [
+            'title' => __('Two-Factor Authentication').' | '.config('app.name'),
+        ]);
     }
 
     /**

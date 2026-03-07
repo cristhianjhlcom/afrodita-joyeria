@@ -14,14 +14,56 @@
                     <livewire:storefront.cart-sheet />
 
                     @auth
-                        <a
-                            href="{{ route('profile.edit') }}"
-                            class="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-slate-600 bg-slate-800 px-3 text-xs font-semibold uppercase tracking-wide text-slate-100 transition hover:border-amber-400 hover:text-amber-300 sm:text-sm"
-                            wire:navigate
-                        >
-                            <flux:icon.user class="size-4" />
-                            <span>{{ __('Mi cuenta') }}</span>
-                        </a>
+                        <flux:dropdown position="bottom" align="end">
+                            <button
+                                type="button"
+                                class="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-slate-600 bg-slate-800 px-3 text-xs font-semibold uppercase tracking-wide text-slate-100 transition hover:border-amber-400 hover:text-amber-300 sm:text-sm"
+                            >
+                                <flux:icon.user class="size-4" />
+                                <span>{{ __('Mi cuenta') }}</span>
+                                <flux:icon.chevron-down class="size-3.5" />
+                            </button>
+
+                            <flux:menu class="min-w-64">
+                                <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
+                                    <flux:avatar :name="auth()->user()->name" :initials="auth()->user()->initials()" />
+                                    <div class="grid flex-1 text-start text-sm leading-tight">
+                                        <flux:heading class="truncate">{{ auth()->user()->name }}</flux:heading>
+                                        <flux:text class="truncate">{{ auth()->user()->email }}</flux:text>
+                                    </div>
+                                </div>
+
+                                <flux:menu.separator />
+
+                                <flux:menu.item :href="route('settings.orders')" icon="archive-box" wire:navigate>
+                                    {{ __('Mis pedidos') }}
+                                </flux:menu.item>
+                                <flux:menu.item :href="route('profile.edit')" icon="user-circle" wire:navigate>
+                                    {{ __('Perfil') }}
+                                </flux:menu.item>
+                                <flux:menu.item :href="route('user-password.edit')" icon="key" wire:navigate>
+                                    {{ __('Contraseña') }}
+                                </flux:menu.item>
+                                <flux:menu.item :href="route('appearance.edit')" icon="swatch" wire:navigate>
+                                    {{ __('Apariencia') }}
+                                </flux:menu.item>
+
+                                <flux:menu.separator />
+
+                                <form method="POST" action="{{ route('logout') }}" class="w-full">
+                                    @csrf
+                                    <flux:menu.item
+                                        as="button"
+                                        type="submit"
+                                        icon="arrow-right-start-on-rectangle"
+                                        class="w-full cursor-pointer"
+                                        data-test="storefront-logout-button"
+                                    >
+                                        {{ __('Cerrar sesión') }}
+                                    </flux:menu.item>
+                                </form>
+                            </flux:menu>
+                        </flux:dropdown>
                     @else
                         <a
                             href="{{ route('login') }}"

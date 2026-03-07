@@ -5,7 +5,7 @@ use App\Models\User;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
-use Illuminate\Validation\Rule;
+use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -22,6 +22,13 @@ new class extends Component {
     {
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
+    }
+
+    public function rendering(View $view): void
+    {
+        $view->layout('layouts.storefront', [
+            'title' => __('Profile').' | '.config('app.name'),
+        ]);
     }
 
     /**
@@ -82,6 +89,16 @@ new class extends Component {
     <flux:heading class="sr-only">{{ __('Profile Settings') }}</flux:heading>
 
     <x-pages::settings.layout :heading="__('Profile')" :subheading="__('Update your name and email address')">
+        <div class="mt-4">
+            <a
+                href="{{ route('settings.orders') }}"
+                wire:navigate
+                class="inline-flex min-h-10 items-center rounded-sm border border-slate-300 px-3 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:bg-slate-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+                {{ __('View my orders') }}
+            </a>
+        </div>
+
         <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
             <flux:input wire:model="name" :label="__('Name')" type="text" required autofocus autocomplete="name" />
 
