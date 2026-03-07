@@ -2,6 +2,7 @@
 
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\Storefront\CartService;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
@@ -16,6 +17,10 @@ new class extends Component
     public ?string $selectedColorKey = null;
 
     public int $activeImageIndex = 0;
+
+    public ?string $cartFeedbackMessage = null;
+
+    public bool $cartFeedbackSuccess = true;
 
     public function mount(Product $product): void
     {
@@ -266,6 +271,36 @@ new class extends Component
         }
 
         $this->activeImageIndex = min(max($index, 0), $count - 1);
+    }
+
+    public function addToCart(): void
+    {
+        if (! $this->isAvailable || $this->selectedVariant === null) {
+            $this->cartFeedbackSuccess = false;
+            $this->cartFeedbackMessage = __('This variant is out of stock.');
+            $this->dispatch('toast-show',
+                duration: 3500,
+                slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+                dataset: ['variant' => 'warning']
+            );
+
+            return;
+        }
+
+        $result = app(CartService::class)->addVariant((int) $this->selectedVariant->id);
+
+        $this->cartFeedbackSuccess = (bool) $result['ok'];
+        $this->cartFeedbackMessage = (string) $result['message'];
+
+        if ($result['ok']) {
+            $this->dispatch('cart-updated');
+        }
+
+        $this->dispatch('toast-show',
+            duration: 3500,
+            slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+            dataset: ['variant' => $result['ok'] ? 'success' : 'warning']
+        );
     }
 
     public function formatMinorAmount(?int $amount): string
@@ -546,6 +581,7 @@ new class extends Component
                 </button>
                 <button
                     type="button"
+                    wire:click="addToCart"
                     class="inline-flex min-h-11 items-center justify-center rounded-sm border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500 dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
                     @disabled(! $this->isAvailable)
                     aria-disabled="{{ $this->isAvailable ? 'false' : 'true' }}"
@@ -553,6 +589,12 @@ new class extends Component
                     {{ __('Add to Cart') }}
                 </button>
             </div>
+
+            @if ($cartFeedbackMessage)
+                <p class="text-sm {{ $cartFeedbackSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400' }}">
+                    {{ $cartFeedbackMessage }}
+                </p>
+            @endif
 
             <div class="space-y-2 border-t border-slate-200 pt-4 text-sm text-slate-600 dark:border-zinc-700 dark:text-zinc-300">
                 <p>{{ __('Secure checkout with protected payment flow.') }}</p>

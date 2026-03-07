@@ -11,15 +11,7 @@
                 </a>
 
                 <div class="order-2 ms-auto flex items-center gap-2 md:order-3">
-                    <button
-                        type="button"
-                        class="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-slate-600 bg-slate-800 px-3 text-xs font-semibold uppercase tracking-wide text-slate-100 transition hover:border-amber-400 hover:text-amber-300 sm:text-sm"
-                        aria-label="{{ __('Shopping cart') }}"
-                    >
-                        <flux:icon.shopping-cart class="size-4" />
-                        <span>{{ __('Cart') }}</span>
-                        <span class="inline-flex size-5 items-center justify-center rounded-sm bg-slate-700 text-[11px] font-bold text-slate-100">0</span>
-                    </button>
+                    <livewire:storefront.cart-sheet />
 
                     @auth
                         <a

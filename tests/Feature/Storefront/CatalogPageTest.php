@@ -4,7 +4,9 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Services\Storefront\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
@@ -330,4 +332,59 @@ it('renders visual product card actions for view and add to cart with clickable 
         ->assertSee('Ver')
         ->assertSee('Agregar')
         ->assertSee(route('storefront.products.show', $product), false);
+});
+
+it('adds first in-stock variant to cart from catalog card action', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Catalog Add Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 15000,
+        'stock_available' => 0,
+        'is_active' => true,
+    ]);
+
+    $inStockVariant = ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12000,
+        'stock_available' => 4,
+        'is_active' => true,
+    ]);
+
+    Livewire::test('pages::storefront.catalog')
+        ->call('addToCart', $product->id)
+        ->assertSet('cartFeedbackSuccess', true)
+        ->assertSet('cartFeedbackMessage', 'Product added to cart.');
+
+    expect((int) session(CartService::SESSION_KEY.'.'.$inStockVariant->id))->toBe(1);
+});
+
+it('returns out of stock feedback when catalog product has no available variants', function () {
+    $subcategory = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'name' => 'Catalog No Stock Product',
+        'subcategory_id' => $subcategory->id,
+        'category_id' => null,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'price' => 12000,
+        'stock_available' => 0,
+        'is_active' => true,
+    ]);
+
+    Livewire::test('pages::storefront.catalog')
+        ->call('addToCart', $product->id)
+        ->assertSet('cartFeedbackSuccess', false)
+        ->assertSet('cartFeedbackMessage', 'This product is out of stock.');
+
+    expect(session(CartService::SESSION_KEY, []))->toBe([]);
 });

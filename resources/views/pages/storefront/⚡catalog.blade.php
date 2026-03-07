@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\Storefront\CartService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -30,6 +31,10 @@ new class extends Component {
 
     #[Url(as: 'max')]
     public int $priceMax = 0;
+
+    public ?string $cartFeedbackMessage = null;
+
+    public bool $cartFeedbackSuccess = true;
 
     public function rendering(View $view): void
     {
@@ -205,6 +210,62 @@ new class extends Component {
         return $product->variants->contains(fn (ProductVariant $variant): bool => (int) $variant->stock_available > 0);
     }
 
+    public function addToCart(int $productId): void
+    {
+        $product = Product::query()
+            ->whereNull('deleted_at')
+            ->with([
+                'variants' => fn ($query) => $query
+                    ->whereNull('deleted_at')
+                    ->where('is_active', true)
+                    ->orderByRaw('COALESCE(sale_price, price) asc')
+                    ->orderBy('id'),
+            ])
+            ->find($productId);
+
+        if (! $product) {
+            $this->cartFeedbackSuccess = false;
+            $this->cartFeedbackMessage = __('Product is no longer available.');
+            $this->dispatch('toast-show',
+                duration: 3500,
+                slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+                dataset: ['variant' => 'warning']
+            );
+
+            return;
+        }
+
+        /** @var ProductVariant|null $variant */
+        $variant = $product->variants
+            ->first(fn (ProductVariant $productVariant): bool => (int) $productVariant->stock_available > 0);
+
+        if (! $variant) {
+            $this->cartFeedbackSuccess = false;
+            $this->cartFeedbackMessage = __('This product is out of stock.');
+            $this->dispatch('toast-show',
+                duration: 3500,
+                slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+                dataset: ['variant' => 'warning']
+            );
+
+            return;
+        }
+
+        $result = app(CartService::class)->addVariant((int) $variant->id);
+        $this->cartFeedbackSuccess = (bool) $result['ok'];
+        $this->cartFeedbackMessage = (string) $result['message'];
+
+        if ($result['ok']) {
+            $this->dispatch('cart-updated');
+        }
+
+        $this->dispatch('toast-show',
+            duration: 3500,
+            slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+            dataset: ['variant' => $result['ok'] ? 'success' : 'warning']
+        );
+    }
+
     public function formatMinorAmount(?int $amount): string
     {
         if ($amount === null) {
@@ -225,6 +286,12 @@ new class extends Component {
         <h1 class="text-3xl font-semibold tracking-tight">{{ __('Catalog') }}</h1>
         <p class="text-sm text-zinc-600 dark:text-zinc-300">{{ __('Browse synced products from the main store.') }}</p>
     </header>
+
+    @if ($cartFeedbackMessage)
+        <div class="rounded-sm border px-4 py-3 text-sm {{ $cartFeedbackSuccess ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800' }}">
+            {{ $cartFeedbackMessage }}
+        </div>
+    @endif
 
     <div class="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside class="self-start space-y-6 rounded-sm border border-zinc-200 bg-white p-4 lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:overflow-auto dark:border-zinc-700 dark:bg-zinc-900">
@@ -357,8 +424,10 @@ new class extends Component {
                                 </a>
                                 <button
                                     type="button"
+                                    wire:click.stop="addToCart({{ $product->id }})"
                                     x-on:click.stop
-                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+                                    @disabled(! $this->hasStock($product))
                                 >
                                     <flux:icon.shopping-bag class="size-3.5" />
                                     <span>{{ __('Agregar') }}</span>

@@ -4,7 +4,9 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Services\Storefront\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
@@ -92,6 +94,28 @@ it('disables buy and add to cart buttons when selected variant has no stock', fu
         ->assertSuccessful()
         ->assertSee('Out of stock')
         ->assertSee('aria-disabled="true"', false);
+});
+
+it('adds selected in-stock variant to the cart from product detail page', function () {
+    $product = Product::factory()->create([
+        'name' => 'Anillo Carrito',
+        'slug' => 'anillo-carrito',
+    ]);
+
+    $variant = ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'size' => 'M',
+        'color' => 'Negro',
+        'stock_available' => 3,
+        'is_active' => true,
+    ]);
+
+    Livewire::test('pages::storefront.product-detail', ['product' => $product])
+        ->call('addToCart')
+        ->assertSet('cartFeedbackSuccess', true)
+        ->assertSet('cartFeedbackMessage', 'Product added to cart.');
+
+    expect((int) session(CartService::SESSION_KEY.'.'.$variant->id))->toBe(1);
 });
 
 it('prioritizes selected variant images over generic product images in carousel', function () {

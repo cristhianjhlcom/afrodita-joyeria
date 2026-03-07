@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::livewire('/', 'pages::storefront.catalog')->name('home');
 Route::livewire('/producto/{product:slug}', 'pages::storefront.product-detail')->name('storefront.products.show');
+Route::livewire('/carrito', 'pages::storefront.cart')->name('storefront.cart.show');
 
 Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
     ->prefix('admin')

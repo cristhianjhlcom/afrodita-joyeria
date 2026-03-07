@@ -14,6 +14,8 @@
             <x-storefront.footer />
         </div>
 
+        <flux:toast position="bottom end" />
+
         @fluxScripts
     </body>
 </html>
