@@ -415,7 +415,7 @@ new class extends Component {
                                     href="{{ $productDetailUrl }}"
                                     wire:navigate
                                     x-on:click.stop
-                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                                    class="inline-flex w-1/2 items-center justify-center gap-1 rounded-sm border border-amber-400 bg-amber-400 px-2.5 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-amber-300"
                                 >
                                     <flux:icon.eye class="size-3.5" />
                                     <span>{{ __('Ver') }}</span>
@@ -424,7 +424,7 @@ new class extends Component {
                                     type="button"
                                     wire:click.stop="addToCart({{ $product->id }})"
                                     x-on:click.stop
-                                    class="inline-flex items-center gap-1 rounded-sm border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+                                    class="inline-flex w-1/2 items-center justify-center gap-1 rounded-sm border border-amber-400 bg-transparent px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:text-zinc-400 dark:disabled:border-zinc-700 dark:disabled:text-zinc-500"
                                     @disabled(! $this->hasStock($product))
                                 >
                                     <flux:icon.shopping-bag class="size-3.5" />
