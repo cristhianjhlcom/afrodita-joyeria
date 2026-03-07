@@ -500,7 +500,7 @@ new class extends Component
             @endif
         </div>
 
-        <article class="space-y-5 rounded-sm border border-slate-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
+        <article class="self-start space-y-5 rounded-sm border border-slate-200 bg-white p-5 lg:sticky lg:top-28 dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
             <header class="space-y-2">
                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
                     {{ $this->productDetails->brand?->name ?? __('Brand unavailable') }}
