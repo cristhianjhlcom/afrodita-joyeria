@@ -2,7 +2,7 @@
     <div class="mx-auto w-full max-w-screen-2xl px-4 py-10 sm:px-6 lg:px-8">
         <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <section class="space-y-3">
-                <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-white">{{ config('app.name') }}</h2>
+                <x-brand-logo :href="route('home')" image-class="h-7 w-auto" />
                 <p class="text-sm leading-6 text-slate-300">
                     {{ __('Joyería seleccionada para compras rápidas, seguras y con envíos a todo el país.') }}
                 </p>

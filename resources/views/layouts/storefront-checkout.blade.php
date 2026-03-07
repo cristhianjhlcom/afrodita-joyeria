@@ -7,9 +7,7 @@
         <div class="flex min-h-screen flex-col">
             <header class="border-b border-slate-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
                 <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-                    <p class="text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-zinc-100">
-                        {{ config('app.name') }}
-                    </p>
+                    <x-brand-logo :href="route('home')" image-class="h-7 w-auto" />
 
                     @if (! empty($cancelUrl ?? null))
                         <a

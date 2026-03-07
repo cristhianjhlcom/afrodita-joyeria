@@ -2,13 +2,11 @@
     <div class="bg-slate-900 text-slate-100">
         <div class="mx-auto w-full max-w-screen-2xl px-3 py-2 sm:px-4">
             <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-                <a
-                    href="{{ route('home') }}"
-                    class="order-1 inline-flex min-h-11 items-center rounded-sm border border-slate-700 px-3 text-sm font-semibold tracking-wide text-white transition hover:border-amber-400 hover:text-amber-300"
-                    wire:navigate
-                >
-                    {{ config('app.name') }}
-                </a>
+                <x-brand-logo
+                    :href="route('home')"
+                    class="order-1 inline-flex min-h-11 items-center rounded-sm border border-slate-700 px-3 transition hover:border-amber-400"
+                    image-class="h-6 w-auto"
+                />
 
                 <div class="order-2 ms-auto flex items-center gap-2 md:order-3">
                     <livewire:storefront.cart-sheet />
