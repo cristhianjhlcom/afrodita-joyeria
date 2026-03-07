@@ -271,7 +271,16 @@ it('prioritizes featured image over synced product images in catalog cards', fun
 });
 
 it('renders shared storefront header navigation and footer on catalog route', function () {
-    $subcategory = Category::factory()->create();
+    $parentCategory = Category::factory()->create([
+        'name' => 'Anillos',
+        'slug' => 'anillos',
+        'parent_id' => null,
+        'is_active' => true,
+    ]);
+
+    $subcategory = Category::factory()->create([
+        'parent_id' => $parentCategory->id,
+    ]);
 
     $product = Product::factory()->create([
         'name' => 'Shared Layout Product',
@@ -288,10 +297,17 @@ it('renders shared storefront header navigation and footer on catalog route', fu
     $this->get(route('home'))
         ->assertSuccessful()
         ->assertSee(config('app.name'))
+        ->assertSee('Iniciar sesión')
+        ->assertSee('Todo')
+        ->assertSee('Anillos')
         ->assertSee('Catalog')
+        ->assertSee('name="q"', false)
+        ->assertSee('type="search"', false)
+        ->assertSee('sticky top-0', false)
         ->assertSee('0')
-        ->assertSee('Quick Links')
-        ->assertSee('Customer Care');
+        ->assertSee('Compras')
+        ->assertSee('Atención al cliente')
+        ->assertSee('Legal');
 });
 
 it('renders visual product card actions for view and add to cart', function () {
