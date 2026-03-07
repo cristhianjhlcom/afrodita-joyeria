@@ -104,13 +104,11 @@ new class extends Component {
             ->whereNull('deleted_at')
             ->where('is_active', true)
             ->whereHas('product', fn ($query) => $query->whereNull('deleted_at'))
-            ->where(function (Builder $query): void {
-                $query->whereNotNull('sale_price')->orWhereNotNull('price');
-            })
-            ->get(['price', 'sale_price']);
+            ->whereNotNull('price')
+            ->get(['price']);
 
         $effectivePrices = $variants
-            ->map(fn (ProductVariant $variant): ?int => $variant->sale_price ?? $variant->price)
+            ->map(fn (ProductVariant $variant): ?int => $variant->price)
             ->filter(fn (?int $amount): bool => $amount !== null)
             ->values();
 
@@ -156,7 +154,7 @@ new class extends Component {
                     ->orderByDesc('is_primary')
                     ->orderBy('sort_order'),
                 'variants' => fn ($query) => $query
-                    ->select(['id', 'product_id', 'price', 'sale_price', 'stock_available', 'is_active'])
+                    ->select(['id', 'product_id', 'price', 'stock_available', 'is_active'])
                     ->whereNull('deleted_at')
                     ->where('is_active', true),
             ])
@@ -171,8 +169,8 @@ new class extends Component {
                     $variantQuery
                         ->whereNull('deleted_at')
                         ->where('is_active', true)
-                        ->whereRaw('COALESCE(sale_price, price) >= ?', [$effectiveMin])
-                        ->whereRaw('COALESCE(sale_price, price) <= ?', [$effectiveMax]);
+                        ->where('price', '>=', $effectiveMin)
+                        ->where('price', '<=', $effectiveMax);
                 });
             });
 
@@ -190,7 +188,7 @@ new class extends Component {
     public function productCardPrice(Product $product): ?int
     {
         return $product->variants
-            ->map(fn (ProductVariant $variant): ?int => $variant->sale_price ?? $variant->price)
+            ->map(fn (ProductVariant $variant): ?int => $variant->price)
             ->filter(fn (?int $amount): bool => $amount !== null)
             ->min();
     }
@@ -218,7 +216,7 @@ new class extends Component {
                 'variants' => fn ($query) => $query
                     ->whereNull('deleted_at')
                     ->where('is_active', true)
-                    ->orderByRaw('COALESCE(sale_price, price) asc')
+                    ->orderBy('price')
                     ->orderBy('id'),
             ])
             ->find($productId);

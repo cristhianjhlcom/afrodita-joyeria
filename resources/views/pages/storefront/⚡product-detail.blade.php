@@ -196,16 +196,14 @@ new class extends Component
         $selectedVariant = $this->selectedVariant;
 
         if ($selectedVariant !== null) {
-            $selectedPrice = $selectedVariant->sale_price ?? $selectedVariant->price;
-
             return [
-                'current' => $selectedPrice,
-                'original' => $selectedVariant->sale_price !== null ? $selectedVariant->price : null,
+                'current' => $selectedVariant->price,
+                'original' => null,
             ];
         }
 
         $fallback = $this->availableVariants
-            ->map(fn (ProductVariant $variant): ?int => $variant->sale_price ?? $variant->price)
+            ->map(fn (ProductVariant $variant): ?int => $variant->price)
             ->filter(fn (?int $amount): bool => $amount !== null)
             ->min();
 

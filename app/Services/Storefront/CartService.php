@@ -80,7 +80,7 @@ class CartService
             }
 
             $validRows[$variantId] = $quantity;
-            $unitPrice = (int) ($variant->sale_price ?? $variant->price ?? 0);
+            $unitPrice = (int) ($variant->price ?? 0);
 
             $items->push([
                 'variant_id' => $variantId,

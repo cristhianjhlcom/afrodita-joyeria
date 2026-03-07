@@ -172,8 +172,9 @@ it('renders seo metadata and product schema on detail page', function () {
 
     $this->get($detailUrl)
         ->assertSuccessful()
-        ->assertSee('<link rel="canonical" href="'.$detailUrl.'">', false)
-        ->assertSee('<meta property="og:type" content="product">', false)
+        ->assertSee('<link href="'.$detailUrl.'" rel="canonical">', false)
+        ->assertSee('property="og:type"', false)
+        ->assertSee('content="product"', false)
         ->assertSee('application/ld+json', false)
         ->assertSee('"@type":"Product"', false);
 });

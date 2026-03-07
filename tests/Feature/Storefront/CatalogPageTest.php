@@ -136,8 +136,8 @@ it('filters catalog by min and max price', function () {
 
     ProductVariant::factory()->create([
         'product_id' => $premiumProduct->id,
-        'price' => 40000,
-        'sale_price' => 35000,
+        'price' => 35000,
+        'sale_price' => 40000,
     ]);
 
     $this->get(route('home', ['min' => 10000, 'max' => 36000]))
