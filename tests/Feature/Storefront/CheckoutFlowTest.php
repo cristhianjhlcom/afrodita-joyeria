@@ -202,7 +202,7 @@ it('shows fallback message when culqi responds with 3ds or iins errors', functio
     $component
         ->call('confirmPayment', (string) $order->order_token, 'tok_test_3ds')
         ->assertSet('feedbackSuccess', false)
-        ->assertSet('feedbackMessage', 'This card is not supported in this checkout. Please try another card or pay with Yape.');
+        ->assertSet('feedbackMessage', 'Esta tarjeta no es compatible con este checkout. Prueba otra tarjeta o paga con Yape.');
 });
 
 it('validates document number by selected type', function () {

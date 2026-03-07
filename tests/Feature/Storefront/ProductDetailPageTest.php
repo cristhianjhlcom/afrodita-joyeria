@@ -35,10 +35,10 @@ it('renders the storefront product detail page by slug', function () {
     $this->get(route('storefront.products.show', $product))
         ->assertSuccessful()
         ->assertSee('Anillo Imperial')
-        ->assertSee('Size')
+        ->assertSee('Talla')
         ->assertSee('Color')
-        ->assertSee('Buy')
-        ->assertSee('Add to Cart');
+        ->assertSee('Comprar')
+        ->assertSee('Agregar al carrito');
 });
 
 it('returns 404 for unknown storefront product slug', function () {
@@ -92,7 +92,7 @@ it('disables buy and add to cart buttons when selected variant has no stock', fu
 
     $this->get(route('storefront.products.show', $product))
         ->assertSuccessful()
-        ->assertSee('Out of stock')
+        ->assertSee('Sin stock')
         ->assertSee('aria-disabled="true"', false);
 });
 
@@ -113,7 +113,7 @@ it('adds selected in-stock variant to the cart from product detail page', functi
     Livewire::test('pages::storefront.product-detail', ['product' => $product])
         ->call('addToCart')
         ->assertSet('cartFeedbackSuccess', true)
-        ->assertSet('cartFeedbackMessage', 'Product added to cart.');
+        ->assertSet('cartFeedbackMessage', 'Producto agregado al carrito.');
 
     expect((int) session(CartService::SESSION_KEY.'.'.$variant->id))->toBe(1);
 });

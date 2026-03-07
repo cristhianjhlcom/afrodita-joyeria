@@ -299,16 +299,16 @@ it('renders shared storefront header navigation and footer on catalog route', fu
     $this->get(route('home'))
         ->assertSuccessful()
         ->assertSee(config('app.name'))
-        ->assertSee('Iniciar sesión')
+        ->assertSee('Iniciar sesion')
         ->assertSee('Todo')
         ->assertSee('Anillos')
-        ->assertSee('Catalog')
+        ->assertSee('Catalogo')
         ->assertSee('name="q"', false)
         ->assertSee('type="search"', false)
         ->assertSee('sticky top-0', false)
         ->assertSee('0')
         ->assertSee('Compras')
-        ->assertSee('Atención al cliente')
+        ->assertSee('Atencion al cliente')
         ->assertSee('Legal');
 });
 
@@ -360,7 +360,7 @@ it('adds first in-stock variant to cart from catalog card action', function () {
     Livewire::test('pages::storefront.catalog')
         ->call('addToCart', $product->id)
         ->assertSet('cartFeedbackSuccess', true)
-        ->assertSet('cartFeedbackMessage', 'Product added to cart.');
+        ->assertSet('cartFeedbackMessage', 'Producto agregado al carrito.');
 
     expect((int) session(CartService::SESSION_KEY.'.'.$inStockVariant->id))->toBe(1);
 });
@@ -384,7 +384,7 @@ it('returns out of stock feedback when catalog product has no available variants
     Livewire::test('pages::storefront.catalog')
         ->call('addToCart', $product->id)
         ->assertSet('cartFeedbackSuccess', false)
-        ->assertSet('cartFeedbackMessage', 'This product is out of stock.');
+        ->assertSet('cartFeedbackMessage', 'Este producto no tiene stock.');
 
     expect(session(CartService::SESSION_KEY, []))->toBe([]);
 });

@@ -66,7 +66,7 @@ it('shows authenticated user local checkout orders', function () {
     $this->actingAs($user)
         ->get(route('settings.orders'))
         ->assertSuccessful()
-        ->assertSee('My Orders')
+        ->assertSee('Mis pedidos')
         ->assertSee('Anillo Dorado')
         ->assertSee('Pulsera Plata')
         ->assertDontSee('Producto Oculto');
