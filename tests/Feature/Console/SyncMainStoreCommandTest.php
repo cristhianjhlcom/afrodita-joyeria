@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\Province;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -97,18 +98,22 @@ it('syncs catalog resources from main store', function () {
                     'is_active' => true,
                     'updated_at' => now()->toIso8601String(),
                 ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/subcategories*' => Http::response([
+            'data' => [
                 [
                     'id' => 101,
+                    'category_id' => 100,
                     'name' => 'Gold Rings',
                     'slug' => 'gold-rings',
-                    'parent_id' => 100,
                     'is_active' => true,
                     'updated_at' => now()->toIso8601String(),
                 ],
             ],
             'meta' => ['next_cursor' => null],
         ]),
-        'https://main-store.test/api/v1/sync/subcategories?*' => Http::response([], 404),
         'https://main-store.test/api/v1/sync/products*' => Http::response([
             'data' => [
                 [
@@ -530,7 +535,7 @@ it('does not fail image sync when variant-images endpoint is missing', function 
     $this->artisan('main-store:sync', ['resource' => 'images'])->assertSuccessful();
 });
 
-it('syncs subcategories endpoint into category parent relations', function () {
+it('syncs subcategories endpoint into subcategories table', function () {
     Http::fake([
         'https://main-store.test/api/v1/sync/categories*' => Http::response([
             'data' => [
@@ -562,9 +567,9 @@ it('syncs subcategories endpoint into category parent relations', function () {
     $this->artisan('main-store:sync', ['resource' => 'categories'])->assertSuccessful();
 
     $parent = Category::query()->where('external_id', 300)->firstOrFail();
-    $child = Category::query()->where('external_id', 301)->firstOrFail();
+    $child = Subcategory::query()->where('external_id', 301)->firstOrFail();
 
-    expect($child->parent_id)->toBe($parent->id);
+    expect($child->category_id)->toBe($parent->id);
 });
 
 it('uses brand integration token when syncing resources', function () {
@@ -606,14 +611,13 @@ it('syncs products from nested external payload without numeric ids', function (
         'external_id' => 100,
         'name' => 'Anillos',
         'slug' => 'anillos',
-        'parent_id' => null,
     ]);
 
-    Category::factory()->create([
+    Subcategory::factory()->create([
         'external_id' => 101,
         'name' => 'Anillos con Figuras',
         'slug' => 'anillos-con-figuras',
-        'parent_id' => $category->id,
+        'category_id' => $category->id,
     ]);
 
     BrandWhitelist::query()->create([
@@ -690,10 +694,10 @@ it('stores payload order url and normalized product and variant images', functio
         'slug' => 'anillos',
     ]);
 
-    Category::factory()->create([
+    Subcategory::factory()->create([
         'name' => 'Anillos con Figuras',
         'slug' => 'anillos-con-figuras',
-        'parent_id' => $category->id,
+        'category_id' => $category->id,
     ]);
 
     BrandWhitelist::query()->create([
@@ -768,10 +772,10 @@ it('keeps products when a full sync payload is empty', function () {
         'slug' => 'anillos',
     ]);
 
-    Category::factory()->create([
+    Subcategory::factory()->create([
         'name' => 'Anillos con Figuras',
         'slug' => 'anillos-con-figuras',
-        'parent_id' => $category->id,
+        'category_id' => $category->id,
     ]);
 
     BrandWhitelist::query()->create([
@@ -857,7 +861,7 @@ it('does not duplicate subcategory creation when same slug appears in one produc
 
     $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
 
-    expect(Category::query()->where('slug', 'accesorios-para-el-cabello')->count())->toBe(1);
+    expect(Subcategory::query()->where('slug', 'accesorios-para-el-cabello')->count())->toBe(1);
 });
 
 it('does not soft delete products from earlier pages in the same sync run', function () {
@@ -871,10 +875,10 @@ it('does not soft delete products from earlier pages in the same sync run', func
         'slug' => 'anillos',
     ]);
 
-    Category::factory()->create([
+    Subcategory::factory()->create([
         'name' => 'Anillos con Figuras',
         'slug' => 'anillos-con-figuras',
-        'parent_id' => $category->id,
+        'category_id' => $category->id,
     ]);
 
     BrandWhitelist::query()->create([
@@ -949,11 +953,11 @@ it('syncs products and nested variants even when ids are missing in products pay
         'slug' => 'accesorios',
     ]);
 
-    $subcategory = Category::factory()->create([
+    $subcategory = Subcategory::factory()->create([
         'external_id' => 201,
         'name' => 'Accesorios para el Cabello',
         'slug' => 'accesorios-para-el-cabello',
-        'parent_id' => $category->id,
+        'category_id' => $category->id,
     ]);
 
     BrandWhitelist::query()->create([

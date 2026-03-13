@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Subcategory;
 use App\Services\Storefront\CartService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -70,18 +71,30 @@ new class extends Component
     }
 
     #[Computed]
-    public function categoryTree()
+    public function categoryGroups(): Collection
     {
-        return Category::query()
-            ->whereNull('parent_id')
+        $categories = Category::query()
             ->where('is_active', true)
             ->whereNull('deleted_at')
-            ->with(['children' => fn ($query) => $query
-                ->where('is_active', true)
-                ->whereNull('deleted_at')
-                ->orderBy('name')])
             ->orderBy('name')
             ->get(['id', 'name']);
+
+        $subcategories = Subcategory::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'category_id']);
+
+        $childrenByParent = $subcategories->groupBy('category_id');
+
+        return $categories
+            ->map(function (Category $category) use ($childrenByParent): array {
+                return [
+                    'parent' => $category,
+                    'children' => $childrenByParent->get($category->id, collect())->values(),
+                ];
+            })
+            ->values();
     }
 
     public function mount(): void
@@ -148,7 +161,7 @@ new class extends Component
             ->with([
                 'brand:id,name',
                 'category:id,name',
-                'subcategory:id,name,parent_id',
+                'subcategory:id,name,category_id',
                 'images' => fn ($query) => $query
                     ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
                     ->whereNull('deleted_at')
@@ -329,16 +342,18 @@ new class extends Component
             <div class="space-y-3">
                 <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">{{ __('Categories') }}</h2>
                 <div class="max-h-72 space-y-3 overflow-auto pr-1">
-                    @forelse ($this->categoryTree as $category)
+                    @forelse ($this->categoryGroups as $group)
+                        @php($parent = $group['parent'])
+                        @php($children = $group['children'])
                         <div class="space-y-2">
                             <label class="flex items-center gap-2 text-sm font-medium">
-                                <input type="checkbox" wire:model.live="categories" value="{{ $category->id }}" class="rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
-                                <span>{{ $category->name }}</span>
+                                <input type="checkbox" wire:model.live="categories" value="{{ $parent->id }}" class="rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
+                                <span>{{ $parent->name }}</span>
                             </label>
 
-                            @if ($category->children->isNotEmpty())
+                            @if ($children->isNotEmpty())
                                 <div class="ml-5 space-y-2">
-                                    @foreach ($category->children as $subcategory)
+                                    @foreach ($children as $subcategory)
                                         <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
                                             <input type="checkbox" wire:model.live="subcategories" value="{{ $subcategory->id }}" class="rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
                                             <span>{{ $subcategory->name }}</span>

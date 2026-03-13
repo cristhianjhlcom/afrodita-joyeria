@@ -5,6 +5,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -191,7 +192,7 @@ it('shows products table with avatar and sync metadata', function () {
 
     $brand = Brand::factory()->create();
     $parentCategory = Category::factory()->create();
-    $subcategory = Category::factory()->subcategory($parentCategory)->create();
+    $subcategory = Subcategory::factory()->create(['category_id' => $parentCategory->id]);
 
     $product = Product::factory()->create([
         'name' => 'Ariel Ring',

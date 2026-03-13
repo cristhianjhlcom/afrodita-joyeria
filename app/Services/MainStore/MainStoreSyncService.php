@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\Province;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -100,8 +101,8 @@ class MainStoreSyncService
         $checkpoint = $forceFull ? null : $this->resolveCheckpoint('categories');
 
         try {
-            $processed += $this->syncCategoryResource('categories', 'parent_id', $checkpoint, false);
-            $processed += $this->syncCategoryResource('subcategories', 'category_id', $checkpoint, true);
+            $processed += $this->syncCategoryResource('categories', $checkpoint, false);
+            $processed += $this->syncSubcategoryResource('subcategories', $checkpoint, true);
 
             $syncRun->update([
                 'status' => 'completed',
@@ -149,6 +150,12 @@ class MainStoreSyncService
             $categoryByNameLower = Category::query()
                 ->get(['id', 'name'])
                 ->mapWithKeys(fn (Category $category): array => [Str::lower((string) $category->name) => $category->id]);
+            $subcategoryMap = Subcategory::query()->pluck('id', 'external_id');
+            $subcategoryBySlug = Subcategory::query()->pluck('id', 'slug');
+            $subcategoryByName = Subcategory::query()->pluck('id', 'name');
+            $subcategoryByNameLower = Subcategory::query()
+                ->get(['id', 'name'])
+                ->mapWithKeys(fn (Subcategory $subcategory): array => [Str::lower((string) $subcategory->name) => $subcategory->id]);
             $whitelistedBrandIds = BrandWhitelist::query()
                 ->where('enabled', true)
                 ->pluck('brand_id')
@@ -180,13 +187,13 @@ class MainStoreSyncService
                     $categoryId = $this->resolveCategoryIdFromNestedPayload($item);
                 }
 
-                $subcategoryId = $categoryMap->get((int) ($item['subcategory_id'] ?? 0));
+                $subcategoryId = $subcategoryMap->get((int) ($item['subcategory_id'] ?? 0));
                 if ($subcategoryId === null) {
                     $subcategoryId = $this->resolveSubcategoryIdFromNestedPayload(
                         $item,
-                        $categoryBySlug,
-                        $categoryByName,
-                        $categoryByNameLower,
+                        $subcategoryBySlug,
+                        $subcategoryByName,
+                        $subcategoryByNameLower,
                         $categoryId
                     );
                 }
@@ -1497,7 +1504,6 @@ class MainStoreSyncService
 
     protected function syncCategoryResource(
         string $resource,
-        string $parentReferenceField,
         ?CarbonImmutable $checkpoint,
         bool $allowMissing
     ): int {
@@ -1522,8 +1528,8 @@ class MainStoreSyncService
 
                 $items = $response['data'];
 
-                DB::transaction(function () use ($items, $parentReferenceField, &$processed): void {
-                    $processed += $this->upsertCategories($items, $parentReferenceField);
+                DB::transaction(function () use ($items, &$processed): void {
+                    $processed += $this->upsertCategories($items);
                 });
 
                 $cursor = Arr::get($response, 'meta.next_cursor');
@@ -1536,7 +1542,7 @@ class MainStoreSyncService
     /**
      * @param  array<int, array<string, mixed>>  $items
      */
-    protected function upsertCategories(array $items, string $parentReferenceField): int
+    protected function upsertCategories(array $items): int
     {
         $rows = collect($items)
             ->map(function (array $item): ?array {
@@ -1574,33 +1580,94 @@ class MainStoreSyncService
             ['name', 'slug', 'is_active', 'deleted_at', 'updated_at', 'created_at'],
         );
 
-        $externalIds = collect($items)
-            ->flatMap(fn (array $item): array => [
-                (int) $item['id'],
-                (int) ($item[$parentReferenceField] ?? 0),
-            ])
-            ->filter(fn (int $id): bool => $id > 0)
-            ->unique()
+        return $rows->count();
+    }
+
+    protected function syncSubcategoryResource(
+        string $resource,
+        ?CarbonImmutable $checkpoint,
+        bool $allowMissing
+    ): int {
+        $processed = 0;
+        $tokens = $this->resolveIntegrationTokens();
+
+        foreach ($tokens as $token) {
+            $cursor = null;
+
+            do {
+                $response = $this->client->fetch(
+                    resource: $resource,
+                    updatedSince: $checkpoint?->toIso8601String(),
+                    cursor: $cursor,
+                    allowMissing: $allowMissing,
+                    token: $token,
+                );
+
+                if ($response === null) {
+                    break;
+                }
+
+                $items = $response['data'];
+
+                DB::transaction(function () use ($items, &$processed): void {
+                    $processed += $this->upsertSubcategories($items);
+                });
+
+                $cursor = Arr::get($response, 'meta.next_cursor');
+            } while ($cursor !== null);
+        }
+
+        return $processed;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    protected function upsertSubcategories(array $items): int
+    {
+        $categoryMap = Category::query()->pluck('id', 'external_id');
+
+        $rows = collect($items)
+            ->map(function (array $item) use ($categoryMap): ?array {
+                $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                if ($externalId === null) {
+                    return null;
+                }
+
+                $categoryId = $categoryMap->get((int) ($item['category_id'] ?? 0));
+                if ($categoryId === null) {
+                    return null;
+                }
+
+                $name = (string) ($item['name'] ?? '');
+                $slug = (string) ($item['slug'] ?? '');
+                if ($slug === '') {
+                    $slug = Str::slug($name !== '' ? $name : "subcategory-{$externalId}");
+                }
+
+                return [
+                    'external_id' => $externalId,
+                    'category_id' => (int) $categoryId,
+                    'name' => $name,
+                    'slug' => $slug,
+                    'is_active' => (bool) ($item['is_active'] ?? true),
+                    'deleted_at' => $this->normalizeTimestamp($item['deleted_at'] ?? null),
+                    'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    'created_at' => $this->normalizeTimestamp($item['created_at'] ?? null) ?? now()->toDateTimeString(),
+                ];
+            })
+            ->filter()
             ->values();
 
-        $categories = Category::query()
-            ->whereIn('external_id', $externalIds)
-            ->get(['id', 'external_id'])
-            ->keyBy('external_id');
-
-        foreach ($items as $item) {
-            $category = $categories->get((int) $item['id']);
-            if (! $category) {
-                continue;
-            }
-
-            $parentExternalId = Arr::get($item, $parentReferenceField);
-            $parentId = $parentExternalId !== null
-                ? optional($categories->get((int) $parentExternalId))->id
-                : null;
-
-            $category->update(['parent_id' => $parentId]);
+        if ($rows->isEmpty()) {
+            return 0;
         }
+
+        Subcategory::query()->upsert(
+            $rows->all(),
+            ['external_id'],
+            ['category_id', 'name', 'slug', 'is_active', 'deleted_at', 'updated_at', 'created_at'],
+        );
 
         return $rows->count();
     }
@@ -1650,9 +1717,9 @@ class MainStoreSyncService
      */
     protected function resolveSubcategoryIdFromNestedPayload(
         array $item,
-        Collection $categoryBySlug,
-        Collection $categoryByName,
-        Collection $categoryByNameLower,
+        Collection $subcategoryBySlug,
+        Collection $subcategoryByName,
+        Collection $subcategoryByNameLower,
         ?int $parentCategoryId = null
     ): ?int {
         $subcategory = Arr::get($item, 'subcategory');
@@ -1668,52 +1735,32 @@ class MainStoreSyncService
         }
 
         if ($slug !== '') {
-            $found = $categoryBySlug->get($slug);
+            $found = $subcategoryBySlug->get($slug);
             if ($found !== null) {
-                if ($parentCategoryId !== null) {
-                    Category::query()->whereKey($found)->update(['parent_id' => $parentCategoryId]);
-                }
-
                 return (int) $found;
             }
 
-            $foundBySlug = Category::query()->where('slug', $slug)->first();
+            $foundBySlug = Subcategory::query()->where('slug', $slug)->first();
             if ($foundBySlug) {
-                if ($parentCategoryId !== null) {
-                    $foundBySlug->update(['parent_id' => $parentCategoryId]);
-                }
-
                 return (int) $foundBySlug->id;
             }
         }
 
         if ($name !== '') {
-            $found = $categoryByName->get($name);
+            $found = $subcategoryByName->get($name);
             if ($found !== null) {
-                if ($parentCategoryId !== null) {
-                    Category::query()->whereKey($found)->update(['parent_id' => $parentCategoryId]);
-                }
-
                 return (int) $found;
             }
 
-            $foundLower = $categoryByNameLower->get(Str::lower($name));
+            $foundLower = $subcategoryByNameLower->get(Str::lower($name));
             if ($foundLower !== null) {
-                if ($parentCategoryId !== null) {
-                    Category::query()->whereKey($foundLower)->update(['parent_id' => $parentCategoryId]);
-                }
-
                 return (int) $foundLower;
             }
 
-            $foundByName = Category::query()
+            $foundByName = Subcategory::query()
                 ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
                 ->first();
             if ($foundByName) {
-                if ($parentCategoryId !== null) {
-                    $foundByName->update(['parent_id' => $parentCategoryId]);
-                }
-
                 return (int) $foundByName->id;
             }
         }
@@ -1722,12 +1769,16 @@ class MainStoreSyncService
             return null;
         }
 
-        $created = Category::query()->create([
+        if ($parentCategoryId === null) {
+            return null;
+        }
+
+        $created = Subcategory::query()->create([
             'external_id' => $this->resolveSyntheticExternalId("subcategory:{$slug}:{$name}"),
             'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
             'slug' => $slug !== '' ? $slug : Str::slug($name),
             'is_active' => true,
-            'parent_id' => $parentCategoryId,
+            'category_id' => $parentCategoryId,
         ]);
 
         return (int) $created->id;
@@ -1775,7 +1826,6 @@ class MainStoreSyncService
             'name' => $name !== '' ? $name : (string) Str::title(str_replace('-', ' ', $slug)),
             'slug' => $slug !== '' ? $slug : Str::slug($name),
             'is_active' => true,
-            'parent_id' => null,
         ]);
 
         return (int) $created->id;

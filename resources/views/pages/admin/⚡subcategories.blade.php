@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Category;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\View\View;
@@ -20,7 +21,7 @@ new class extends Component
 
     public function rendering(View $view): void
     {
-        $view->layout('layouts.admin', ['title' => __('Admin Categories')]);
+        $view->layout('layouts.admin', ['title' => __('Admin Subcategories')]);
     }
 
     public function updatedSearch(): void
@@ -29,10 +30,11 @@ new class extends Component
     }
 
     #[Computed]
-    public function categories()
+    public function subcategories()
     {
-        return Category::query()
-            ->withCount(['subcategories', 'products'])
+        return Subcategory::query()
+            ->with('category:id,name')
+            ->withCount('products')
             ->when($this->search !== '', fn ($query) => $query->where('name', 'like', "%{$this->search}%"))
             ->orderBy('name')
             ->paginate(12);
@@ -83,7 +85,7 @@ new class extends Component
 
     public function queueCategoriesSync(): void
     {
-        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
+        abort_unless(auth()->user()?->can('viewAny', Category::class), 403);
 
         Artisan::call('main-store:sync', [
             'resource' => 'categories',
@@ -96,15 +98,15 @@ new class extends Component
 }; ?>
 
 <section class="w-full">
-    <x-pages::admin.layout :heading="__('Categories')" :subheading="__('Manage category hierarchy mirrored from the main store')">
+    <x-pages::admin.layout :heading="__('Subcategories')" :subheading="__('Manage subcategories mirrored from the main store')">
         <div class="space-y-4">
             @if ($syncQueued)
-                <flux:callout icon="check-circle" variant="success" heading="{{ __('Categories sync queued successfully') }}" />
+                <flux:callout icon="check-circle" variant="success" heading="{{ __('Subcategories sync queued successfully') }}" />
             @endif
 
             <flux:card class="space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <flux:heading size="sm">{{ __('Categories Sync Status') }}</flux:heading>
+                    <flux:heading size="sm">{{ __('Subcategories Sync Status') }}</flux:heading>
                     <flux:badge :color="$this->syncStatus['badge_color']">{{ $this->syncStatus['state_label'] }}</flux:badge>
                 </div>
                 <div class="flex flex-wrap gap-4 text-sm text-zinc-600">
@@ -114,17 +116,17 @@ new class extends Component
             </flux:card>
 
             <div class="flex flex-wrap items-end justify-between gap-3">
-                <flux:input wire:model.live.debounce.300ms="search" :label="__('Search category')" placeholder="{{ __('Type a category name...') }}" />
+                <flux:input wire:model.live.debounce.300ms="search" :label="__('Search subcategory')" placeholder="{{ __('Type a subcategory name...') }}" />
                 <flux:button variant="primary" wire:click="queueCategoriesSync" wire:loading.attr="disabled">
                     <span wire:loading.remove wire:target="queueCategoriesSync">{{ __('Queue Sync') }}</span>
                     <span wire:loading wire:target="queueCategoriesSync">{{ __('Queuing...') }}</span>
                 </flux:button>
             </div>
 
-            <flux:table :paginate="$this->categories">
+            <flux:table :paginate="$this->subcategories">
                 <flux:table.columns>
                     <flux:table.column>{{ __('Name') }}</flux:table.column>
-                    <flux:table.column>{{ __('Subcategories') }}</flux:table.column>
+                    <flux:table.column>{{ __('Category') }}</flux:table.column>
                     <flux:table.column>{{ __('Products') }}</flux:table.column>
                     <flux:table.column>{{ __('Sync Status') }}</flux:table.column>
                     <flux:table.column>{{ __('Last Synced') }}</flux:table.column>
@@ -132,20 +134,20 @@ new class extends Component
                 </flux:table.columns>
 
                 <flux:table.rows>
-                    @forelse ($this->categories as $category)
-                        <flux:table.row :key="$category->id">
-                            <flux:table.cell variant="strong">{{ $category->name }}</flux:table.cell>
-                            <flux:table.cell>{{ number_format($category->subcategories_count) }}</flux:table.cell>
-                            <flux:table.cell>{{ number_format($category->products_count) }}</flux:table.cell>
+                    @forelse ($this->subcategories as $subcategory)
+                        <flux:table.row :key="$subcategory->id">
+                            <flux:table.cell variant="strong">{{ $subcategory->name }}</flux:table.cell>
+                            <flux:table.cell>{{ $subcategory->category?->name ?? '-' }}</flux:table.cell>
+                            <flux:table.cell>{{ number_format($subcategory->products_count) }}</flux:table.cell>
                             <flux:table.cell>
                                 <flux:badge :color="$this->syncStatus['badge_color']">{{ $this->syncStatus['state_label'] }}</flux:badge>
                             </flux:table.cell>
                             <flux:table.cell>{{ optional($this->syncStatus['last_synced_at'])?->format('Y-m-d H:i') ?? '-' }}</flux:table.cell>
-                            <flux:table.cell>{{ $category->external_id ?? '-' }}</flux:table.cell>
+                            <flux:table.cell>{{ $subcategory->external_id ?? '-' }}</flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6">{{ __('No categories found for the selected filters.') }}</flux:table.cell>
+                            <flux:table.cell colspan="6">{{ __('No subcategories found for the selected filters.') }}</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>

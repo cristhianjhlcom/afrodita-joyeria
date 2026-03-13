@@ -58,7 +58,7 @@ new class extends Component
             ->with([
                 'brand:id,name',
                 'category:id,name',
-                'subcategory:id,name,parent_id',
+                'subcategory:id,name,category_id',
                 'images' => fn ($query) => $query
                     ->whereNull('deleted_at')
                     ->orderByDesc('is_primary')

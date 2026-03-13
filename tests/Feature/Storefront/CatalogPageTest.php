@@ -4,6 +4,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Models\Subcategory;
 use App\Services\Storefront\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -11,7 +12,7 @@ use Livewire\Livewire;
 uses(RefreshDatabase::class);
 
 it('renders the storefront catalog on home route', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Ariel Ring',
@@ -39,7 +40,7 @@ it('renders the storefront catalog on home route', function () {
 });
 
 it('shows all products when no search or filters are applied', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $withVariant = Product::factory()->create([
         'name' => 'Variant Product',
@@ -66,7 +67,7 @@ it('shows all products when no search or filters are applied', function () {
 });
 
 it('paginates products on storefront grid', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     foreach (range(1, 21) as $index) {
         $product = Product::factory()->create([
@@ -90,7 +91,7 @@ it('paginates products on storefront grid', function () {
 });
 
 it('filters catalog by search term', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $matchingProduct = Product::factory()->create([
         'name' => 'Ruby Necklace',
@@ -114,7 +115,7 @@ it('filters catalog by search term', function () {
 });
 
 it('filters catalog by min and max price', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $budgetProduct = Product::factory()->create([
         'name' => 'Budget Studs',
@@ -150,16 +151,16 @@ it('filters catalog by category and subcategory', function () {
     $parentA = Category::factory()->create(['name' => 'Rings', 'slug' => 'rings']);
     $parentB = Category::factory()->create(['name' => 'Necklaces', 'slug' => 'necklaces']);
 
-    $subA = Category::factory()->create([
+    $subA = Subcategory::factory()->create([
         'name' => 'Wedding Rings',
         'slug' => 'wedding-rings',
-        'parent_id' => $parentA->id,
+        'category_id' => $parentA->id,
     ]);
 
-    $subB = Category::factory()->create([
+    $subB = Subcategory::factory()->create([
         'name' => 'Pearl Necklaces',
         'slug' => 'pearl-necklaces',
-        'parent_id' => $parentB->id,
+        'category_id' => $parentB->id,
     ]);
 
     $ringProduct = Product::factory()->create([
@@ -184,7 +185,7 @@ it('filters catalog by category and subcategory', function () {
 });
 
 it('falls back to all products when filters return no results', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $firstProduct = Product::factory()->create([
         'name' => 'Open Catalog Ring',
@@ -208,7 +209,7 @@ it('falls back to all products when filters return no results', function () {
 });
 
 it('renders product card image from primary product images', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Image Source Product',
@@ -244,7 +245,7 @@ it('renders product card image from primary product images', function () {
 });
 
 it('prioritizes primary product image over featured image in catalog cards', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Featured Card Product',
@@ -276,12 +277,11 @@ it('renders shared storefront header navigation and footer on catalog route', fu
     $parentCategory = Category::factory()->create([
         'name' => 'Anillos',
         'slug' => 'anillos',
-        'parent_id' => null,
         'is_active' => true,
     ]);
 
-    $subcategory = Category::factory()->create([
-        'parent_id' => $parentCategory->id,
+    $subcategory = Subcategory::factory()->create([
+        'category_id' => $parentCategory->id,
         'name' => 'Anillos de Compromiso',
         'slug' => 'anillos-de-compromiso',
     ]);
@@ -316,7 +316,7 @@ it('renders shared storefront header navigation and footer on catalog route', fu
 });
 
 it('renders visual product card actions for view and add to cart with clickable detail link', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Action Buttons Product',
@@ -338,7 +338,7 @@ it('renders visual product card actions for view and add to cart with clickable 
 });
 
 it('adds first in-stock variant to cart from catalog card action', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Catalog Add Product',
@@ -369,7 +369,7 @@ it('adds first in-stock variant to cart from catalog card action', function () {
 });
 
 it('returns out of stock feedback when catalog product has no available variants', function () {
-    $subcategory = Category::factory()->create();
+    $subcategory = Subcategory::factory()->create();
 
     $product = Product::factory()->create([
         'name' => 'Catalog No Stock Product',

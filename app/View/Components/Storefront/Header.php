@@ -3,6 +3,7 @@
 namespace App\View\Components\Storefront;
 
 use App\Models\Category;
+use App\Models\Subcategory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\View\Component;
@@ -24,40 +25,26 @@ class Header extends Component
     {
         $categories = Category::query()
             ->where('is_active', true)
+            ->whereNull('deleted_at')
             ->orderBy('name')
-            ->get(['id', 'name', 'slug', 'parent_id']);
+            ->get(['id', 'name', 'slug']);
 
-        $parents = $categories
-            ->whereNull('parent_id')
-            ->values();
-        $children = $categories
-            ->whereNotNull('parent_id')
-            ->values();
-        $childrenByParent = $children->groupBy('parent_id');
+        $subcategories = Subcategory::query()
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'category_id']);
 
-        $groups = $parents->map(function (Category $parent) use ($childrenByParent): array {
-            return [
-                'parent' => $parent,
-                'children' => $childrenByParent->get($parent->id, collect())->values(),
-                'is_top_level' => true,
-            ];
-        });
+        $childrenByParent = $subcategories->groupBy('category_id');
 
-        $orphanChildren = $children
-            ->reject(fn (Category $child): bool => $parents->contains('id', $child->parent_id))
-            ->values();
-
-        $orphanGroups = $orphanChildren->map(function (Category $child): array {
-            return [
-                'parent' => $child,
-                'children' => collect(),
-                'is_top_level' => false,
-            ];
-        });
-
-        return $groups
-            ->concat($orphanGroups)
-            ->sortBy(fn (array $group): string => $group['parent']->name)
+        return $categories
+            ->map(function (Category $category) use ($childrenByParent): array {
+                return [
+                    'parent' => $category,
+                    'children' => $childrenByParent->get($category->id, collect())->values(),
+                    'is_top_level' => true,
+                ];
+            })
             ->values();
     }
 

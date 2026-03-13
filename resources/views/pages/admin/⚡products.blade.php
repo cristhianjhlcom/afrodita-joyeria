@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Brand;
-use App\Models\Category;
 use App\Models\Product;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\View\View;
@@ -11,7 +11,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
+new class extends Component
+{
     use WithPagination;
 
     public bool $syncQueued = false;
@@ -54,7 +55,7 @@ new class extends Component {
     #[Computed]
     public function subcategories()
     {
-        return Category::query()->whereNotNull('parent_id')->orderBy('name')->get(['id', 'name']);
+        return Subcategory::query()->orderBy('name')->get(['id', 'name']);
     }
 
     #[Computed]

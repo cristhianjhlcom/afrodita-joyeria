@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\Subcategory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -24,7 +25,7 @@ class ProductFactory extends Factory
             'external_id' => fake()->unique()->numberBetween(1, 999999),
             'brand_id' => Brand::factory(),
             'category_id' => Category::factory(),
-            'subcategory_id' => Category::factory(),
+            'subcategory_id' => Subcategory::factory(),
             'name' => $name,
             'slug' => Str::slug($name.'-'.fake()->unique()->numerify('###')),
             'description' => fake()->paragraph(),

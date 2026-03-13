@@ -4,6 +4,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
+use App\Models\Subcategory;
 use App\Services\Storefront\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -12,7 +13,7 @@ uses(RefreshDatabase::class);
 
 it('renders the storefront product detail page by slug', function () {
     $category = Category::factory()->create(['name' => 'Anillos', 'slug' => 'anillos']);
-    $subcategory = Category::factory()->create(['parent_id' => $category->id, 'name' => 'Oro', 'slug' => 'oro']);
+    $subcategory = Subcategory::factory()->create(['category_id' => $category->id, 'name' => 'Oro', 'slug' => 'oro']);
 
     $product = Product::factory()->create([
         'name' => 'Anillo Imperial',

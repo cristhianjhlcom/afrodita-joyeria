@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Subcategory;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -56,8 +57,8 @@ it('filters products by search, brand and category', function () {
     $otherBrand = Brand::factory()->create(['name' => 'Silver Arc']);
 
     $parent = Category::factory()->create(['name' => 'Rings']);
-    $matchingSubcategory = Category::factory()->subcategory($parent)->create(['name' => 'Engagement Rings']);
-    $otherSubcategory = Category::factory()->subcategory($parent)->create(['name' => 'Wedding Rings']);
+    $matchingSubcategory = Subcategory::factory()->create(['name' => 'Engagement Rings', 'category_id' => $parent->id]);
+    $otherSubcategory = Subcategory::factory()->create(['name' => 'Wedding Rings', 'category_id' => $parent->id]);
 
     Product::factory()->create([
         'name' => 'Celeste Diamond Ring',

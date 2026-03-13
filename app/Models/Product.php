@@ -79,7 +79,7 @@ class Product extends Model
 
     public function subcategory(): BelongsTo
     {
-        return $this->belongsTo(Category::class, 'subcategory_id');
+        return $this->belongsTo(Subcategory::class, 'subcategory_id');
     }
 
     public function variants(): HasMany

@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Province;
+use App\Models\Subcategory;
 use App\Models\SyncRun;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,9 @@ Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
         Route::livewire('categories', 'pages::admin.categories')
             ->can('viewAny', Category::class)
             ->name('categories');
+        Route::livewire('subcategories', 'pages::admin.subcategories')
+            ->can('viewAny', Subcategory::class)
+            ->name('subcategories');
         Route::livewire('products', 'pages::admin.products')
             ->can('viewAny', Product::class)
             ->name('products');

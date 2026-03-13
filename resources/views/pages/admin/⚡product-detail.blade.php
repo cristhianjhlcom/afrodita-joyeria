@@ -5,7 +5,8 @@ use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
-new class extends Component {
+new class extends Component
+{
     public Product $product;
 
     public function rendering(View $view): void
@@ -21,7 +22,7 @@ new class extends Component {
         return Product::query()
             ->with([
                 'brand:id,name',
-                'subcategory:id,name,parent_id',
+                'subcategory:id,name,category_id',
                 'variants' => fn ($query) => $query->withCount('images')->orderBy('id'),
                 'images' => fn ($query) => $query->with('variant:id,product_id,sku,code')->orderBy('sort_order'),
             ])
