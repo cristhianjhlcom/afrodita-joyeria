@@ -29,9 +29,11 @@ return new class extends Migration
         if (Schema::hasColumn('categories', 'parent_id')) {
             $this->migrateCategorySubcategories();
 
-            Schema::table('products', function (Blueprint $table): void {
-                $table->dropForeign(['subcategory_id']);
-            });
+            if ($this->foreignKeyExists('products', 'products_subcategory_id_foreign')) {
+                Schema::table('products', function (Blueprint $table): void {
+                    $table->dropForeign('products_subcategory_id_foreign');
+                });
+            }
 
             DB::table('products as p')
                 ->leftJoin('subcategories as s', 'p.subcategory_id', '=', 's.id')
@@ -66,9 +68,11 @@ return new class extends Migration
 
         $this->restoreCategoryParentsFromSubcategories();
 
-        Schema::table('products', function (Blueprint $table): void {
-            $table->dropForeign(['subcategory_id']);
-        });
+        if ($this->foreignKeyExists('products', 'products_subcategory_id_foreign')) {
+            Schema::table('products', function (Blueprint $table): void {
+                $table->dropForeign('products_subcategory_id_foreign');
+            });
+        }
 
         Schema::table('products', function (Blueprint $table): void {
             $table->foreign('subcategory_id')
@@ -199,5 +203,15 @@ return new class extends Migration
                     }
                 }
             });
+    }
+
+    protected function foreignKeyExists(string $table, string $constraint): bool
+    {
+        $result = DB::selectOne(
+            'SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? LIMIT 1',
+            [$table, $constraint]
+        );
+
+        return $result !== null;
     }
 };
