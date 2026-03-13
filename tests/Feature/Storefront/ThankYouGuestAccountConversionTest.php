@@ -40,7 +40,7 @@ it('renders thank you page', function () {
 
     $this->get(route('storefront.checkout.thank-you', ['orderToken' => $order->order_token]))
         ->assertSuccessful()
-        ->assertSee('Thank you for your purchase!');
+        ->assertSee(__('Thank you for your purchase!'));
 });
 
 it('allows guest to create account from thank-you page', function () {
@@ -51,7 +51,7 @@ it('allows guest to create account from thank-you page', function () {
         ->set('password_confirmation', 'Password123!')
         ->call('createAccount')
         ->assertSet('feedbackSuccess', true)
-        ->assertSet('feedbackMessage', 'Your account has been created successfully.');
+        ->assertSet('feedbackMessage', __('Your account has been created successfully.'));
 
     $user = User::query()->where('email', 'guest@example.com')->firstOrFail();
 
@@ -70,7 +70,7 @@ it('does not show account creation form when email already exists', function () 
 
     Livewire::test('pages::storefront.checkout-thank-you', ['orderToken' => $order->order_token])
         ->assertSet('canCreateAccount', false)
-        ->assertSee('Already have an account?');
+        ->assertSee(__('Already have an account?'));
 });
 
 it('shows my orders button for authenticated users on thank-you page', function () {
@@ -86,5 +86,5 @@ it('shows my orders button for authenticated users on thank-you page', function 
         ->get(route('storefront.checkout.thank-you', ['orderToken' => $order->order_token]))
         ->assertSuccessful()
         ->assertSee(route('settings.orders'))
-        ->assertSee('Go to my orders');
+        ->assertSee(__('Go to my orders'));
 });

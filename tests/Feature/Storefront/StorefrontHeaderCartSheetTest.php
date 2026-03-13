@@ -54,7 +54,7 @@ it('updates quantities and clears cart through cart sheet actions', function () 
         ->assertSet('feedbackSuccess', true)
         ->call('clearCart')
         ->assertSet('feedbackSuccess', true)
-        ->assertSet('feedbackMessage', 'Cart cleared.');
+        ->assertSet('feedbackMessage', __('Cart cleared.'));
 
     expect(session(CartService::SESSION_KEY, []))->toBe([]);
 });

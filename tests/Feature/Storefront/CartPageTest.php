@@ -85,5 +85,5 @@ it('shows checkout action from cart page', function () {
     $this->get(route('storefront.cart.show'))
         ->assertSuccessful()
         ->assertSee(route('storefront.checkout.show'))
-        ->assertSee('Go to checkout');
+        ->assertSee(__('Go to checkout'));
 });
