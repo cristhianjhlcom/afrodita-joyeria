@@ -2,8 +2,10 @@
 
 namespace App\Services\MainStore;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -40,6 +42,17 @@ class MainStoreApiClient
             $response = $this->request($token)
                 ->get("/api/v1/sync/{$path}", $query);
 
+            if ($response->status() >= 500 && $this->shouldRetryLegacyUpdatedSince($response, $updatedSince)) {
+                $legacyUpdatedSince = $this->formatLegacyUpdatedSince($updatedSince);
+
+                if ($legacyUpdatedSince !== null && $legacyUpdatedSince !== $updatedSince) {
+                    $query['updated_since'] = $legacyUpdatedSince;
+
+                    $response = $this->request($token)
+                        ->get("/api/v1/sync/{$path}", $query);
+                }
+            }
+
             if ($response->status() === 404) {
                 $lastNotFound = $response;
 
@@ -68,6 +81,38 @@ class MainStoreApiClient
         throw new RuntimeException("Unable to resolve endpoint path for resource [{$resource}].");
     }
 
+    protected function shouldRetryLegacyUpdatedSince(Response $response, ?string $updatedSince): bool
+    {
+        if ($updatedSince === null || trim($updatedSince) === '') {
+            return false;
+        }
+
+        $payload = $response->json();
+
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        $message = (string) Arr::get($payload, 'error.message', '');
+
+        return str_contains($message, 'Illegal operator and value combination');
+    }
+
+    protected function formatLegacyUpdatedSince(?string $updatedSince): ?string
+    {
+        if ($updatedSince === null || trim($updatedSince) === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($updatedSince)
+                ->utc()
+                ->toDateTimeString();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
@@ -76,6 +121,22 @@ class MainStoreApiClient
     {
         $response = $this->request()
             ->post('/api/v1/orders', $payload);
+
+        $response->throw();
+
+        /** @var array<string, mixed> $responsePayload */
+        $responsePayload = $response->json();
+
+        return $responsePayload;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getOrder(string $externalOrderId): array
+    {
+        $response = $this->request()
+            ->get("/api/v1/orders/{$externalOrderId}");
 
         $response->throw();
 

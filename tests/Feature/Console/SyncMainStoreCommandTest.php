@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\Province;
+use App\Models\SyncRun;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -27,6 +28,28 @@ it('fails early when main store base url is missing', function () {
 
     $this->artisan('main-store:sync', ['resource' => 'all', '--queued' => true])
         ->assertFailed();
+});
+
+it('skips updated_since when full sync is requested', function () {
+    SyncRun::factory()->completed()->create([
+        'resource' => 'brands',
+        'checkpoint_updated_since' => now()->subDay(),
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/brand*' => Http::response([
+            'data' => [],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'brands', '--full' => true])
+        ->assertSuccessful();
+
+    Http::assertSent(function (Request $request): bool {
+        return $request->url() === 'https://main-store.test/api/v1/sync/brand?per_page=100'
+            && ! str_contains($request->url(), 'updated_since=');
+    });
 });
 
 it('fails early when no token exists in enabled brand integrations and fallback token is missing', function () {
@@ -112,6 +135,12 @@ it('syncs catalog resources from main store', function () {
                     'color' => 'Gold',
                     'hex' => '#FFD700',
                     'size' => '7',
+                    'include_in_merchant' => true,
+                    'gtin' => '1234567890123',
+                    'mpn' => 'MPN-001',
+                    'google_product_category' => 'Jewelry',
+                    'sale_price_starts_at' => now()->subDay()->toIso8601String(),
+                    'sale_price_ends_at' => now()->addDay()->toIso8601String(),
                     'product_id' => 501,
                     'updated_at' => now()->toIso8601String(),
                 ],
@@ -134,7 +163,7 @@ it('syncs catalog resources from main store', function () {
         'https://main-store.test/api/v1/sync/variant-images*' => Http::response([
             'data' => [
                 [
-                    'id' => 1001,
+                    'id' => 'variant-701-image',
                     'product_id' => 501,
                     'variant_id' => 701,
                     'url' => 'https://cdn.main-store.test/products/501-1.jpg',
@@ -154,7 +183,16 @@ it('syncs catalog resources from main store', function () {
     $this->artisan('main-store:sync', ['resource' => 'inventory'])->assertSuccessful();
 
     expect(Product::query()->where('external_id', 501)->exists())->toBeTrue();
-    expect(ProductVariant::query()->where('external_id', 701)->where('stock_available', 17)->exists())->toBeTrue();
+
+    $variant = ProductVariant::query()->where('external_id', 701)->firstOrFail();
+
+    expect($variant->stock_available)->toBe(17);
+    expect($variant->include_in_merchant)->toBeTrue();
+    expect($variant->gtin)->toBe('1234567890123');
+    expect($variant->mpn)->toBe('MPN-001');
+    expect($variant->google_product_category)->toBe('Jewelry');
+    expect($variant->sale_price_starts_at)->not->toBeNull();
+    expect($variant->sale_price_ends_at)->not->toBeNull();
 });
 
 it('syncs mirrored orders from main store', function () {
@@ -173,16 +211,22 @@ it('syncs mirrored orders from main store', function () {
                     'grand_total' => 10000,
                     'placed_at' => now()->toIso8601String(),
                     'updated_at' => now()->toIso8601String(),
-                    'items' => [
-                        [
-                            'variant_id' => 701,
-                            'sku' => 'SKU-0001',
-                            'name_snapshot' => 'Elegant Ring',
-                            'qty' => 1,
-                            'unit_price' => 10000,
-                            'line_total' => 10000,
-                        ],
-                    ],
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ]),
+        'https://main-store.test/api/v1/sync/order-items*' => Http::response([
+            'data' => [
+                [
+                    'id' => 7000,
+                    'order_id' => 9001,
+                    'variant_id' => 701,
+                    'sku' => 'SKU-0001',
+                    'name_snapshot' => 'Elegant Ring',
+                    'qty' => 1,
+                    'unit_price' => 10000,
+                    'line_total' => 10000,
+                    'updated_at' => now()->toIso8601String(),
                 ],
             ],
             'meta' => ['next_cursor' => null],
@@ -191,11 +235,14 @@ it('syncs mirrored orders from main store', function () {
 
     $this->artisan('main-store:sync', ['resource' => 'orders'])
         ->assertSuccessful();
+    $this->artisan('main-store:sync', ['resource' => 'order-items'])
+        ->assertSuccessful();
 
     $order = Order::query()->where('external_id', 9001)->firstOrFail();
 
     expect($order->items)->toHaveCount(1);
     expect($order->items->first()->sku)->toBe('SKU-0001');
+    expect($order->items->first()->external_id)->toBe(7000);
     expect($order->getRawOriginal('updated_at'))->toContain(' ');
     expect($order->getRawOriginal('updated_at'))->not->toContain('T');
 });
@@ -241,6 +288,7 @@ it('syncs address resources from main store endpoints', function () {
                     'name' => 'Lima',
                     'ubigeo_code' => '1501',
                     'shipping_price' => '12.50',
+                    'cost' => '10.00',
                     'is_active' => true,
                     'country' => [
                         'id' => 1,
@@ -315,6 +363,7 @@ it('syncs address resources from main store endpoints', function () {
                                     'name' => 'Lima',
                                     'ubigeo_code' => '1501',
                                     'shipping_price' => '12.50',
+                                    'cost' => '10.00',
                                     'is_active' => true,
                                     'districts' => [
                                         [
@@ -349,7 +398,7 @@ it('syncs address resources from main store endpoints', function () {
 
     expect(Country::query()->where('external_id', 1)->exists())->toBeTrue();
     expect(Department::query()->where('external_id', 15)->exists())->toBeTrue();
-    expect(Province::query()->where('external_id', 1501)->where('shipping_price', 1250)->exists())->toBeTrue();
+    expect(Province::query()->where('external_id', 1501)->where('shipping_price', 1250)->where('cost', 1000)->exists())->toBeTrue();
     expect(District::query()->where('external_id', 150101)->where('shipping_price', 1250)->where('has_delivery_express', true)->exists())->toBeTrue();
 });
 
@@ -396,6 +445,81 @@ it('supports endpoint aliases for brand and stock sync resources', function () {
 
     expect(Brand::query()->where('external_id', 11)->exists())->toBeTrue();
     expect(ProductVariant::query()->where('external_id', 702)->where('stock_available', 7)->exists())->toBeTrue();
+});
+
+it('does not soft delete products when sync returns empty payload', function () {
+    $brand = Brand::factory()->create([
+        'external_id' => 55,
+    ]);
+
+    BrandWhitelist::query()->create([
+        'brand_id' => $brand->id,
+        'enabled' => true,
+        'main_store_token' => '1|brand-token',
+    ]);
+
+    $product = Product::factory()->create([
+        'external_id' => 9090,
+        'brand_id' => $brand->id,
+        'deleted_at' => null,
+    ]);
+
+    Http::fake([
+        'https://main-store.test/api/v1/sync/products*' => Http::response([
+            'data' => [],
+            'meta' => ['next_cursor' => null],
+        ]),
+    ]);
+
+    $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
+
+    $product->refresh();
+
+    expect($product->deleted_at)->toBeNull();
+});
+
+it('retries inventory sync when updated_since format causes server error', function () {
+    $product = Product::factory()->create([
+        'external_id' => 801,
+    ]);
+
+    $variant = ProductVariant::factory()->create([
+        'external_id' => 802,
+        'product_id' => $product->id,
+        'stock_available' => 0,
+    ]);
+
+    SyncRun::factory()->completed()->create([
+        'resource' => 'inventory',
+        'checkpoint_updated_since' => now()->subDay(),
+    ]);
+
+    Http::fakeSequence('https://main-store.test/api/v1/sync/stocks*')
+        ->push([
+            'error' => [
+                'code' => 'server_error',
+                'message' => 'Illegal operator and value combination.',
+            ],
+        ], 500)
+        ->push([
+            'data' => [
+                [
+                    'variant_id' => 802,
+                    'stock_on_hand' => 4,
+                    'stock_reserved' => 1,
+                    'stock_available' => 3,
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ],
+            'meta' => ['next_cursor' => null],
+        ], 200);
+
+    $this->artisan('main-store:sync', ['resource' => 'inventory'])->assertSuccessful();
+
+    $variant->refresh();
+
+    expect($variant->stock_available)->toBe(3);
+    Http::assertSentCount(2);
 });
 
 it('does not fail image sync when variant-images endpoint is missing', function () {
@@ -633,7 +757,7 @@ it('stores payload order url and normalized product and variant images', functio
     expect(ProductImage::query()->where('variant_id', $variant->id)->exists())->toBeTrue();
 });
 
-it('soft deletes missing products for the token scoped brand', function () {
+it('keeps products when a full sync payload is empty', function () {
     $brand = Brand::factory()->create([
         'name' => 'Afrodita',
         'slug' => 'afrodita',
@@ -681,7 +805,7 @@ it('soft deletes missing products for the token scoped brand', function () {
     $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
     $this->artisan('main-store:sync', ['resource' => 'products'])->assertSuccessful();
 
-    expect(Product::query()->withTrashed()->where('slug', 'producto-activo')->firstOrFail()->trashed())->toBeTrue();
+    expect(Product::query()->withTrashed()->where('slug', 'producto-activo')->firstOrFail()->trashed())->toBeFalse();
 });
 
 it('does not duplicate subcategory creation when same slug appears in one products payload', function () {

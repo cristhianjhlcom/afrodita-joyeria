@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\PolicyController;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Country;
@@ -17,6 +18,19 @@ Route::livewire('/producto/{product:slug}', 'pages::storefront.product-detail')-
 Route::livewire('/carrito', 'pages::storefront.cart')->name('storefront.cart.show');
 Route::livewire('/checkout', 'pages::storefront.checkout')->name('storefront.checkout.show');
 Route::livewire('/checkout/thank-you/{orderToken}', 'pages::storefront.checkout-thank-you')->name('storefront.checkout.thank-you');
+
+Route::get('/politicas/terminos-y-condiciones', [PolicyController::class, 'show'])
+    ->defaults('policy', 'terminos-y-condiciones')
+    ->name('policies.terms');
+Route::get('/politicas/privacidad', [PolicyController::class, 'show'])
+    ->defaults('policy', 'privacidad')
+    ->name('policies.privacy');
+Route::get('/politicas/devoluciones', [PolicyController::class, 'show'])
+    ->defaults('policy', 'devoluciones')
+    ->name('policies.returns');
+Route::get('/politicas/envios', [PolicyController::class, 'show'])
+    ->defaults('policy', 'envios')
+    ->name('policies.shipping');
 
 Route::middleware(['auth', 'verified', 'admin', 'admin-locale'])
     ->prefix('admin')

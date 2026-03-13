@@ -34,7 +34,7 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 
 ## In Progress
 - [x] Phase 2: deeper admin operations and UX hardening
-- [ ] Phase 3: public storefront implementation + main-store API contract alignment
+- [x] Phase 3: public storefront implementation + main-store API contract alignment
 
 ## Pending / Next Phases
 - [x] Add product detail page with variant/image drill-down actions
@@ -47,12 +47,12 @@ Build an admin-first jewelry eCommerce platform synced from the main store, with
 - [x] Optional: notification/alerting for repeated sync failures
 
 ## Environment / Ops Checklist
-- [ ] `.env` configured for MySQL
-- [ ] `MAIN_STORE_BASE_URL` configured
-- [ ] `MAIN_STORE_TOKEN` configured
-- [ ] Queue worker running in dev (`php artisan queue:work` or composer dev)
-- [ ] Scheduler running in environment
-- [ ] Migrations up to date
+- [x] `.env` configured for MySQL
+- [x] `MAIN_STORE_BASE_URL` configured
+- [x] `MAIN_STORE_TOKEN` configured
+- [x] Queue worker running in dev (`php artisan queue:work` or composer dev)
+- [x] Scheduler running in environment
+- [x] Migrations up to date
 
 ## Session Log Template
 Use this format for each session:
@@ -66,7 +66,7 @@ Use this format for each session:
 - Next action:
 
 ## Current Branch Snapshot
-- Active branch: `docs/main-store-sync-requirements`
+- Active branch: `feat/main-store-sync-v1-alignment`
 - Key recent commits:
   - `4654f01` feat: add dedicated admin layout with grouped sidebar
   - `a984681` fix: run product_variants migration before product_images foreign key
@@ -76,6 +76,36 @@ Use this format for each session:
   - `e8d87b0` feat: add ecommerce domain schema models and factories
   - `86016e2` chore: add initial laravel project setup
   - `57566a7` docs: add main store integration requirements for catalog sync
+
+### Session 2026-03-13
+- Goal: Align main-store sync and order push with Sync API v1 updates.
+- Changes made:
+- Added order-items sync resource/job and updated sync pipeline for new fields.
+- Mapped variant merchant fields, sale windows, province cost, and string image ids.
+- Updated order push payload to new POST contract and added order fetch client helper.
+- Added migrations for new sync fields and updated checklists.
+- Files touched:
+- `app/Services/MainStore/MainStoreSyncService.php`
+- `app/Services/MainStore/MainStoreApiClient.php`
+- `app/Services/Storefront/OrderPushService.php`
+- `app/Console/Commands/SyncMainStoreCommand.php`
+- `app/Jobs/SyncOrderItemsJob.php`
+- `app/Models/ProductVariant.php`
+- `app/Models/Province.php`
+- `app/Models/OrderItem.php`
+- `config/services.php`
+- `database/migrations/2026_03_13_064855_add_sync_v1_fields_to_product_variants_table.php`
+- `database/migrations/2026_03_13_064859_add_cost_to_provinces_table.php`
+- `database/migrations/2026_03_13_064901_add_external_id_to_order_items_table.php`
+- `tests/Feature/Console/SyncMainStoreCommandTest.php`
+- `tests/Feature/MainStore/OrderPushCommandsTest.php`
+- `docs/main-store-requirements.md`
+- `docs/project-checklist.md`
+- Tests run:
+- `php artisan test --compact tests/Feature/Console/SyncMainStoreCommandTest.php tests/Feature/MainStore/OrderPushCommandsTest.php tests/Feature/Storefront/CheckoutFlowTest.php`
+- Result: Passing.
+- Next action:
+- Review main store API implementation and run the full test suite when ready.
 
 ### Session 2026-02-19
 - Goal: Continue Phase 2 with first operations UX improvement for admin catalog workflows.

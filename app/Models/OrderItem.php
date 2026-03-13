@@ -16,6 +16,7 @@ class OrderItem extends Model
      */
     protected $fillable = [
         'order_id',
+        'external_id',
         'variant_external_id',
         'sku',
         'name_snapshot',
@@ -31,6 +32,7 @@ class OrderItem extends Model
     {
         return [
             'order_id' => 'integer',
+            'external_id' => 'integer',
             'variant_external_id' => 'integer',
             'qty' => 'integer',
             'unit_price' => 'integer',

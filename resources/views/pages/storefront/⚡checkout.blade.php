@@ -293,7 +293,7 @@ new class extends Component
             return;
         }
 
-        $result = app(CheckoutService::class)->preparePendingOrder([
+        $result = app(CheckoutService::class)->prepareCheckoutSession([
             'customer_name' => trim($validated['firstName'].' '.$validated['lastName']),
             'customer_email' => $validated['customerEmail'],
             'customer_phone' => preg_replace('/\D+/', '', $validated['customerPhone']) ?? $validated['customerPhone'],

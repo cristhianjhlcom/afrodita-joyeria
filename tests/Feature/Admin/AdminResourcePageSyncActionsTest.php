@@ -165,6 +165,25 @@ it('queues addresses sync from addresses page', function () {
         ->assertSet('syncQueued', true);
 });
 
+it('queues inventory sync from inventory page', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::Admin,
+    ]);
+
+    Artisan::shouldReceive('call')
+        ->once()
+        ->with('main-store:sync', [
+            'resource' => 'inventory',
+            '--queued' => true,
+        ])
+        ->andReturn(0);
+
+    Livewire::actingAs($admin)
+        ->test('pages::admin.inventory')
+        ->call('queueInventorySync')
+        ->assertSet('syncQueued', true);
+});
+
 it('shows products table with avatar and sync metadata', function () {
     $admin = User::factory()->create([
         'role' => UserRole::Admin,

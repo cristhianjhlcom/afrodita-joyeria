@@ -26,7 +26,7 @@ class MainStoreSyncService
 {
     public function __construct(protected MainStoreApiClient $client) {}
 
-    public function syncBrands(bool $includeDisabled = false): int
+    public function syncBrands(bool $includeDisabled = false, bool $forceFull = false): int
     {
         return $this->syncResource('brands', function (array $items) use ($includeDisabled): int {
             $brands = collect($items)
@@ -83,10 +83,10 @@ class MainStoreSyncService
             }
 
             return $brands->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncCategories(): int
+    public function syncCategories(bool $forceFull = false): int
     {
         $syncRun = SyncRun::query()->create([
             'resource' => 'categories',
@@ -97,7 +97,7 @@ class MainStoreSyncService
         ]);
 
         $processed = 0;
-        $checkpoint = $this->resolveCheckpoint('categories');
+        $checkpoint = $forceFull ? null : $this->resolveCheckpoint('categories');
 
         try {
             $processed += $this->syncCategoryResource('categories', 'parent_id', $checkpoint, false);
@@ -124,21 +124,24 @@ class MainStoreSyncService
         return $processed;
     }
 
-    public function syncProducts(): int
+    public function syncProducts(bool $forceFull = false): int
     {
         $tokenBrandScopes = $this->resolveTokenBrandScopes();
         $seenProductsByToken = [];
         $seenVariantsByToken = [];
         $seenImagesByToken = [];
         $scopedBrandsByToken = [];
+        $receivedPayloadByToken = [];
 
         return $this->syncResource('products', function (array $items, string $token) use (
             $tokenBrandScopes,
             &$seenProductsByToken,
             &$seenVariantsByToken,
             &$seenImagesByToken,
-            &$scopedBrandsByToken
+            &$scopedBrandsByToken,
+            &$receivedPayloadByToken
         ): int {
+            $receivedPayloadByToken[$token] = ($receivedPayloadByToken[$token] ?? false) || $items !== [];
             $brandMap = Brand::query()->pluck('id', 'external_id');
             $categoryMap = Category::query()->pluck('id', 'external_id');
             $categoryBySlug = Category::query()->pluck('id', 'slug');
@@ -258,6 +261,12 @@ class MainStoreSyncService
                         'color' => $variant['color'] ?? null,
                         'hex' => $variant['hex'] ?? null,
                         'size' => $variant['size'] ?? null,
+                        'include_in_merchant' => (bool) ($variant['include_in_merchant'] ?? true),
+                        'gtin' => Arr::get($variant, 'gtin'),
+                        'mpn' => Arr::get($variant, 'mpn'),
+                        'google_product_category' => Arr::get($variant, 'google_product_category'),
+                        'sale_price_starts_at' => $this->normalizeTimestamp($variant['sale_price_starts_at'] ?? null),
+                        'sale_price_ends_at' => $this->normalizeTimestamp($variant['sale_price_ends_at'] ?? null),
                         'primary_image_url' => Arr::get($variant, 'image'),
                         'stock_available' => (int) ($variant['stock'] ?? 0),
                         'stock_on_hand' => (int) ($variant['stock'] ?? 0),
@@ -330,7 +339,7 @@ class MainStoreSyncService
                     ProductVariant::query()->upsert(
                         $preparedVariantRows->all(),
                         ['external_id'],
-                        ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'stock_on_hand', 'stock_reserved', 'stock_available', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                        ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'include_in_merchant', 'gtin', 'mpn', 'google_product_category', 'sale_price_starts_at', 'sale_price_ends_at', 'primary_image_url', 'stock_on_hand', 'stock_reserved', 'stock_available', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
                     );
                 }
             }
@@ -378,7 +387,11 @@ class MainStoreSyncService
             $seenImagesByToken[$token] = array_values(array_unique(array_merge($seenImagesByToken[$token] ?? [], $seenImageExternalIds)));
 
             return $rows->count();
-        }, useCheckpoint: false, afterToken: function (string $token) use (&$seenProductsByToken, &$seenVariantsByToken, &$seenImagesByToken, &$scopedBrandsByToken): void {
+        }, useCheckpoint: false, afterToken: function (string $token) use (&$seenProductsByToken, &$seenVariantsByToken, &$seenImagesByToken, &$scopedBrandsByToken, &$receivedPayloadByToken): void {
+            if (! ($receivedPayloadByToken[$token] ?? false)) {
+                return;
+            }
+
             $this->softDeleteMissingCatalogRecords(
                 $scopedBrandsByToken[$token] ?? [],
                 $seenProductsByToken[$token] ?? [],
@@ -388,7 +401,7 @@ class MainStoreSyncService
         });
     }
 
-    public function syncVariants(): int
+    public function syncVariants(bool $forceFull = false): int
     {
         return $this->syncResource('variants', function (array $items): int {
             $productMap = Product::query()->pluck('id', 'external_id');
@@ -418,6 +431,12 @@ class MainStoreSyncService
                         'color' => $item['color'] ?? null,
                         'hex' => $item['hex'] ?? null,
                         'size' => $item['size'] ?? null,
+                        'include_in_merchant' => (bool) ($item['include_in_merchant'] ?? true),
+                        'gtin' => Arr::get($item, 'gtin'),
+                        'mpn' => Arr::get($item, 'mpn'),
+                        'google_product_category' => Arr::get($item, 'google_product_category'),
+                        'sale_price_starts_at' => $this->normalizeTimestamp($item['sale_price_starts_at'] ?? null),
+                        'sale_price_ends_at' => $this->normalizeTimestamp($item['sale_price_ends_at'] ?? null),
                         'primary_image_url' => Arr::get($item, 'image'),
                         'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
                         'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
@@ -435,14 +454,14 @@ class MainStoreSyncService
             ProductVariant::query()->upsert(
                 $rows->all(),
                 ['external_id'],
-                ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'primary_image_url', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                ['product_id', 'sku', 'code', 'price', 'sale_price', 'color', 'hex', 'size', 'include_in_merchant', 'gtin', 'mpn', 'google_product_category', 'sale_price_starts_at', 'sale_price_ends_at', 'primary_image_url', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncImages(): int
+    public function syncImages(bool $forceFull = false): int
     {
         return $this->syncResource('variant-images', function (array $items): int {
             $productMap = Product::query()->pluck('id', 'external_id');
@@ -451,6 +470,9 @@ class MainStoreSyncService
             $rows = collect($items)
                 ->map(function (array $item) use ($productMap, $variantMap): ?array {
                     $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    if ($externalId === null && is_string($item['id'] ?? null)) {
+                        $externalId = $this->resolveSyntheticExternalId('image:'.$item['id']);
+                    }
                     if ($externalId === null) {
                         return null;
                     }
@@ -493,10 +515,10 @@ class MainStoreSyncService
             );
 
             return $rows->count();
-        }, allowMissing: true);
+        }, allowMissing: true, useCheckpoint: ! $forceFull);
     }
 
-    public function syncInventory(): int
+    public function syncInventory(bool $forceFull = false): int
     {
         return $this->syncResource('inventory', function (array $items): int {
             $variantMap = ProductVariant::query()->pluck('id', 'external_id');
@@ -571,15 +593,34 @@ class MainStoreSyncService
             }
 
             return $updated;
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncOrders(): int
+    public function syncOrders(bool $forceFull = false): int
     {
         return $this->syncResource('orders', function (array $items): int {
+            foreach ($items as $item) {
+                $externalOrderId = Arr::get($item, 'external_order_id');
+                $externalId = Arr::get($item, 'id');
+
+                if (! is_string($externalOrderId) || $externalOrderId === '') {
+                    continue;
+                }
+
+                if (! is_numeric($externalId)) {
+                    continue;
+                }
+
+                Order::query()
+                    ->where('main_store_external_order_id', $externalOrderId)
+                    ->whereNull('external_id')
+                    ->update(['external_id' => (int) $externalId]);
+            }
+
             $orders = collect($items)
                 ->map(fn (array $item): array => [
                     'external_id' => (int) $item['id'],
+                    'main_store_external_order_id' => Arr::get($item, 'external_order_id'),
                     'external_customer_id' => Arr::get($item, 'customer_id'),
                     'status' => (string) ($item['status'] ?? 'pending'),
                     'currency' => (string) ($item['currency'] ?? 'USD'),
@@ -601,7 +642,7 @@ class MainStoreSyncService
             Order::query()->upsert(
                 $orders->all(),
                 ['external_id'],
-                ['external_customer_id', 'status', 'currency', 'subtotal', 'discount_total', 'shipping_total', 'tax_total', 'grand_total', 'placed_at', 'updated_at', 'created_at'],
+                ['main_store_external_order_id', 'external_customer_id', 'status', 'currency', 'subtotal', 'discount_total', 'shipping_total', 'tax_total', 'grand_total', 'placed_at', 'updated_at', 'created_at'],
             );
 
             $localOrders = Order::query()
@@ -615,9 +656,15 @@ class MainStoreSyncService
                     continue;
                 }
 
-                $orderItems = collect($item['items'] ?? [])
+                $itemsPayload = $item['items'] ?? null;
+                if (! is_array($itemsPayload) || $itemsPayload === []) {
+                    continue;
+                }
+
+                $orderItems = collect($itemsPayload)
                     ->map(fn (array $orderItem): array => [
                         'order_id' => $order->id,
+                        'external_id' => $this->resolveNumericExternalId($orderItem['id'] ?? null),
                         'variant_external_id' => Arr::get($orderItem, 'variant_id'),
                         'sku' => $orderItem['sku'] ?? null,
                         'name_snapshot' => (string) ($orderItem['name_snapshot'] ?? 'Unknown item'),
@@ -636,10 +683,66 @@ class MainStoreSyncService
             }
 
             return $orders->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncCountries(): int
+    public function syncOrderItems(bool $forceFull = false): int
+    {
+        return $this->syncResource('order-items', function (array $items): int {
+            $orderMap = Order::query()->pluck('id', 'external_id');
+            if ($orderMap->isEmpty()) {
+                return 0;
+            }
+
+            $rows = collect($items)
+                ->map(function (array $item) use ($orderMap): ?array {
+                    $externalId = $this->resolveNumericExternalId($item['id'] ?? null);
+                    if ($externalId === null) {
+                        return null;
+                    }
+
+                    $orderExternalId = $this->resolveNumericExternalId($item['order_id'] ?? null);
+                    if ($orderExternalId === null) {
+                        return null;
+                    }
+
+                    $orderId = $orderMap->get($orderExternalId);
+                    if ($orderId === null) {
+                        return null;
+                    }
+
+                    return [
+                        'external_id' => $externalId,
+                        'order_id' => (int) $orderId,
+                        'variant_external_id' => $this->resolveNumericExternalId($item['variant_id'] ?? null),
+                        'sku' => $item['sku'] ?? null,
+                        'name_snapshot' => (string) ($item['name_snapshot'] ?? 'Unknown item'),
+                        'qty' => (int) ($item['qty'] ?? 1),
+                        'unit_price' => (int) ($item['unit_price'] ?? 0),
+                        'line_total' => (int) ($item['line_total'] ?? 0),
+                        'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                        'created_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
+                    ];
+                })
+                ->filter()
+                ->unique('external_id')
+                ->values();
+
+            if ($rows->isEmpty()) {
+                return 0;
+            }
+
+            OrderItem::query()->upsert(
+                $rows->all(),
+                ['external_id'],
+                ['order_id', 'variant_external_id', 'sku', 'name_snapshot', 'qty', 'unit_price', 'line_total', 'updated_at', 'created_at'],
+            );
+
+            return $rows->count();
+        }, useCheckpoint: ! $forceFull);
+    }
+
+    public function syncCountries(bool $forceFull = false): int
     {
         return $this->syncResource('countries', function (array $items): int {
             $rows = collect($items)
@@ -676,10 +779,10 @@ class MainStoreSyncService
             );
 
             return $rows->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncDepartments(): int
+    public function syncDepartments(bool $forceFull = false): int
     {
         return $this->syncResource('departments', function (array $items): int {
             $countryRows = collect($items)
@@ -759,10 +862,10 @@ class MainStoreSyncService
             );
 
             return $rows->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncProvinces(): int
+    public function syncProvinces(bool $forceFull = false): int
     {
         return $this->syncResource('provinces', function (array $items): int {
             $countryRows = collect($items)
@@ -872,6 +975,7 @@ class MainStoreSyncService
                         'name' => (string) ($item['name'] ?? ''),
                         'ubigeo_code' => Arr::get($item, 'ubigeo_code'),
                         'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($item, 'shipping_price')),
+                        'cost' => $this->normalizeMoneyToMinorAmount(Arr::get($item, 'cost')),
                         'is_active' => (bool) ($item['is_active'] ?? true),
                         'remote_updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null),
                         'updated_at' => $this->normalizeTimestamp($item['updated_at'] ?? null) ?? now()->toDateTimeString(),
@@ -890,14 +994,14 @@ class MainStoreSyncService
             Province::query()->upsert(
                 $rows->all(),
                 ['external_id'],
-                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'cost', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             return $rows->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncDistricts(): int
+    public function syncDistricts(bool $forceFull = false): int
     {
         return $this->syncResource('districts', function (array $items): int {
             $countryRows = collect($items)
@@ -1092,10 +1196,10 @@ class MainStoreSyncService
             );
 
             return $rows->count();
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
-    public function syncAddresses(): int
+    public function syncAddresses(bool $forceFull = false): int
     {
         return $this->syncResource('addresses', function (array $items): int {
             $countries = [];
@@ -1163,6 +1267,7 @@ class MainStoreSyncService
                             'name' => (string) ($provinceItem['name'] ?? ''),
                             'ubigeo_code' => Arr::get($provinceItem, 'ubigeo_code'),
                             'shipping_price' => $this->normalizeMoneyToMinorAmount(Arr::get($provinceItem, 'shipping_price')),
+                            'cost' => $this->normalizeMoneyToMinorAmount(Arr::get($provinceItem, 'cost')),
                             'is_active' => (bool) ($provinceItem['is_active'] ?? true),
                             'remote_updated_at' => $this->normalizeTimestamp($provinceItem['updated_at'] ?? null),
                             'updated_at' => $this->normalizeTimestamp($provinceItem['updated_at'] ?? null) ?? now()->toDateTimeString(),
@@ -1253,7 +1358,7 @@ class MainStoreSyncService
             Province::query()->upsert(
                 $provinceRows,
                 ['external_id'],
-                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
+                ['country_id', 'department_id', 'name', 'ubigeo_code', 'shipping_price', 'cost', 'is_active', 'remote_updated_at', 'updated_at', 'created_at', 'deleted_at'],
             );
 
             $provinceMap = Province::query()->pluck('id', 'external_id');
@@ -1284,7 +1389,7 @@ class MainStoreSyncService
             );
 
             return count($countries) + count($departments) + count($provinces) + count($districts);
-        });
+        }, useCheckpoint: ! $forceFull);
     }
 
     /**

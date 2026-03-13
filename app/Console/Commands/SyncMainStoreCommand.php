@@ -10,6 +10,7 @@ use App\Jobs\SyncDepartmentsJob;
 use App\Jobs\SyncDistrictsJob;
 use App\Jobs\SyncImagesJob;
 use App\Jobs\SyncInventoryJob;
+use App\Jobs\SyncOrderItemsJob;
 use App\Jobs\SyncOrdersJob;
 use App\Jobs\SyncProductsJob;
 use App\Jobs\SyncProvincesJob;
@@ -24,8 +25,9 @@ class SyncMainStoreCommand extends Command
      * @var string
      */
     protected $signature = 'main-store:sync
-                            {resource=all : all|brands|categories|products|variants|images|inventory|orders|countries|departments|provinces|districts|addresses}
-                            {--queued : Dispatch jobs instead of running sync inline}';
+                            {resource=all : all|brands|categories|products|variants|images|inventory|orders|order-items|countries|departments|provinces|districts|addresses}
+                            {--queued : Dispatch jobs instead of running sync inline}
+                            {--full : Run a full sync without updated_since checkpoints}';
 
     /**
      * @var string
@@ -36,6 +38,7 @@ class SyncMainStoreCommand extends Command
     {
         $resource = (string) $this->argument('resource');
         $queued = (bool) $this->option('queued');
+        $forceFull = (bool) $this->option('full');
         $allowedResources = [
             'all',
             'brands',
@@ -45,6 +48,7 @@ class SyncMainStoreCommand extends Command
             'images',
             'inventory',
             'orders',
+            'order-items',
             'countries',
             'departments',
             'provinces',
@@ -63,13 +67,13 @@ class SyncMainStoreCommand extends Command
         }
 
         if ($queued) {
-            $this->dispatchResourceJobs($resource);
+            $this->dispatchResourceJobs($resource, $forceFull);
             $this->components->info('Main store sync jobs dispatched.');
 
             return self::SUCCESS;
         }
 
-        $this->runInlineSync($syncService, $resource);
+        $this->runInlineSync($syncService, $resource, $forceFull);
         $this->components->info('Main store sync completed.');
 
         return self::SUCCESS;
@@ -100,73 +104,77 @@ class SyncMainStoreCommand extends Command
         return true;
     }
 
-    protected function dispatchResourceJobs(string $resource): void
+    protected function dispatchResourceJobs(string $resource, bool $forceFull): void
     {
         match ($resource) {
-            'all' => $this->dispatchAllJobs(),
-            'brands' => SyncBrandsJob::dispatch(),
-            'categories' => SyncCategoriesJob::dispatch(),
-            'products' => SyncProductsJob::dispatch(),
-            'variants' => SyncVariantsJob::dispatch(),
-            'images' => SyncImagesJob::dispatch(),
-            'inventory' => SyncInventoryJob::dispatch(),
-            'orders' => SyncOrdersJob::dispatch(),
-            'countries' => SyncCountriesJob::dispatch(),
-            'departments' => SyncDepartmentsJob::dispatch(),
-            'provinces' => SyncProvincesJob::dispatch(),
-            'districts' => SyncDistrictsJob::dispatch(),
-            'addresses' => SyncAddressesJob::dispatch(),
+            'all' => $this->dispatchAllJobs($forceFull),
+            'brands' => SyncBrandsJob::dispatch($forceFull),
+            'categories' => SyncCategoriesJob::dispatch($forceFull),
+            'products' => SyncProductsJob::dispatch($forceFull),
+            'variants' => SyncVariantsJob::dispatch($forceFull),
+            'images' => SyncImagesJob::dispatch($forceFull),
+            'inventory' => SyncInventoryJob::dispatch($forceFull),
+            'orders' => SyncOrdersJob::dispatch($forceFull),
+            'order-items' => SyncOrderItemsJob::dispatch($forceFull),
+            'countries' => SyncCountriesJob::dispatch($forceFull),
+            'departments' => SyncDepartmentsJob::dispatch($forceFull),
+            'provinces' => SyncProvincesJob::dispatch($forceFull),
+            'districts' => SyncDistrictsJob::dispatch($forceFull),
+            'addresses' => SyncAddressesJob::dispatch($forceFull),
         };
     }
 
-    protected function runInlineSync(MainStoreSyncService $syncService, string $resource): void
+    protected function runInlineSync(MainStoreSyncService $syncService, string $resource, bool $forceFull): void
     {
         match ($resource) {
-            'all' => $this->runAllInline($syncService),
-            'brands' => $syncService->syncBrands(),
-            'categories' => $syncService->syncCategories(),
-            'products' => $syncService->syncProducts(),
-            'variants' => $syncService->syncVariants(),
-            'images' => $syncService->syncImages(),
-            'inventory' => $syncService->syncInventory(),
-            'orders' => $syncService->syncOrders(),
-            'countries' => $syncService->syncCountries(),
-            'departments' => $syncService->syncDepartments(),
-            'provinces' => $syncService->syncProvinces(),
-            'districts' => $syncService->syncDistricts(),
-            'addresses' => $syncService->syncAddresses(),
+            'all' => $this->runAllInline($syncService, $forceFull),
+            'brands' => $syncService->syncBrands(forceFull: $forceFull),
+            'categories' => $syncService->syncCategories(forceFull: $forceFull),
+            'products' => $syncService->syncProducts(forceFull: $forceFull),
+            'variants' => $syncService->syncVariants(forceFull: $forceFull),
+            'images' => $syncService->syncImages(forceFull: $forceFull),
+            'inventory' => $syncService->syncInventory(forceFull: $forceFull),
+            'orders' => $syncService->syncOrders(forceFull: $forceFull),
+            'order-items' => $syncService->syncOrderItems(forceFull: $forceFull),
+            'countries' => $syncService->syncCountries(forceFull: $forceFull),
+            'departments' => $syncService->syncDepartments(forceFull: $forceFull),
+            'provinces' => $syncService->syncProvinces(forceFull: $forceFull),
+            'districts' => $syncService->syncDistricts(forceFull: $forceFull),
+            'addresses' => $syncService->syncAddresses(forceFull: $forceFull),
         };
     }
 
-    protected function dispatchAllJobs(): void
+    protected function dispatchAllJobs(bool $forceFull): void
     {
-        SyncBrandsJob::dispatch();
-        SyncCategoriesJob::dispatch();
-        SyncProductsJob::dispatch();
-        SyncVariantsJob::dispatch();
-        SyncImagesJob::dispatch();
-        SyncInventoryJob::dispatch();
-        SyncOrdersJob::dispatch();
-        SyncCountriesJob::dispatch();
-        SyncDepartmentsJob::dispatch();
-        SyncProvincesJob::dispatch();
-        SyncDistrictsJob::dispatch();
-        SyncAddressesJob::dispatch();
+        SyncBrandsJob::dispatch($forceFull);
+        SyncCategoriesJob::dispatch($forceFull);
+        SyncProductsJob::dispatch($forceFull);
+        SyncVariantsJob::dispatch($forceFull);
+        SyncImagesJob::dispatch($forceFull);
+        SyncInventoryJob::dispatch($forceFull);
+        SyncOrdersJob::dispatch($forceFull);
+        SyncOrderItemsJob::dispatch($forceFull);
+        SyncCountriesJob::dispatch($forceFull);
+        SyncDepartmentsJob::dispatch($forceFull);
+        SyncProvincesJob::dispatch($forceFull);
+        SyncDistrictsJob::dispatch($forceFull);
+        SyncAddressesJob::dispatch($forceFull);
     }
 
-    protected function runAllInline(MainStoreSyncService $syncService): void
+    protected function runAllInline(MainStoreSyncService $syncService, bool $forceFull): void
     {
-        $syncService->syncBrands();
-        $syncService->syncCategories();
-        $syncService->syncProducts();
-        $syncService->syncVariants();
-        $syncService->syncImages();
-        $syncService->syncInventory();
-        $syncService->syncOrders();
-        $syncService->syncCountries();
-        $syncService->syncDepartments();
-        $syncService->syncProvinces();
-        $syncService->syncDistricts();
-        $syncService->syncAddresses();
+        $syncService->syncBrands(forceFull: $forceFull);
+        $syncService->syncCategories(forceFull: $forceFull);
+        $syncService->syncProducts(forceFull: $forceFull);
+        $syncService->syncVariants(forceFull: $forceFull);
+        $syncService->syncImages(forceFull: $forceFull);
+        $syncService->syncInventory(forceFull: $forceFull);
+        $syncService->syncOrders(forceFull: $forceFull);
+        $syncService->syncOrderItems(forceFull: $forceFull);
+        $syncService->syncCountries(forceFull: $forceFull);
+        $syncService->syncDepartments(forceFull: $forceFull);
+        $syncService->syncProvinces(forceFull: $forceFull);
+        $syncService->syncDistricts(forceFull: $forceFull);
+        $syncService->syncAddresses(forceFull: $forceFull);
     }
 }

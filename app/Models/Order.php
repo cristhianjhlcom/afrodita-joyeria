@@ -21,6 +21,7 @@ class Order extends Model
         'user_id',
         'external_id',
         'main_store_external_order_id',
+        'main_store_order_id',
         'external_customer_id',
         'customer_name',
         'customer_email',
@@ -40,6 +41,10 @@ class Order extends Model
         'payment_error_code',
         'payment_error_message',
         'paid_at',
+        'push_status',
+        'push_attempts',
+        'push_last_error',
+        'push_last_response',
         'status',
         'currency',
         'subtotal',
@@ -60,6 +65,7 @@ class Order extends Model
         return [
             'user_id' => 'integer',
             'external_id' => 'integer',
+            'main_store_order_id' => 'integer',
             'external_customer_id' => 'integer',
             'shipping_country_id' => 'integer',
             'shipping_department_id' => 'integer',
@@ -72,6 +78,8 @@ class Order extends Model
             'grand_total' => 'integer',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',
+            'push_attempts' => 'integer',
+            'push_last_response' => 'array',
             'is_refunded' => 'boolean',
         ];
     }

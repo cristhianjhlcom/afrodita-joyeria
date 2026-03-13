@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
-use Database\Seeders\DevelopmentTestingSeeder;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Date;
@@ -61,6 +60,10 @@ class AppServiceProvider extends ServiceProvider
                 return;
             }
 
+            if ($event->exitCode !== 0) {
+                return;
+            }
+
             if (! app()->isLocal() || app()->runningUnitTests()) {
                 return;
             }
@@ -70,12 +73,12 @@ class AppServiceProvider extends ServiceProvider
             }
 
             Artisan::call('db:seed', [
-                '--class' => DevelopmentTestingSeeder::class,
+                '--class' => \Database\Seeders\TestUserSeeder::class,
                 '--force' => true,
             ]);
 
             $event->output?->writeln('');
-            $event->output?->writeln('<info>DevelopmentTestingSeeder executed automatically for local migrate:fresh.</info>');
+            $event->output?->writeln('<info>TestUserSeeder executed automatically for local migrate:fresh.</info>');
         });
     }
 }

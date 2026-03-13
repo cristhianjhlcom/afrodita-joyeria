@@ -12,8 +12,10 @@ class SyncOrdersJob implements ShouldQueue
 
     public int $timeout = 120;
 
+    public function __construct(public bool $forceFull = false) {}
+
     public function handle(MainStoreSyncService $syncService): void
     {
-        $syncService->syncOrders();
+        $syncService->syncOrders(forceFull: $this->forceFull);
     }
 }

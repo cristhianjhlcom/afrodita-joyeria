@@ -1,13 +1,16 @@
 <?php
 
 use App\Models\ProductVariant;
+use App\Models\SyncRun;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
+new class extends Component
+{
     use WithPagination;
 
     public function rendering(View $view): void
@@ -21,6 +24,8 @@ new class extends Component {
     #[Url(as: 'low')]
     public bool $onlyLowStock = false;
 
+    public bool $syncQueued = false;
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -29,6 +34,18 @@ new class extends Component {
     public function updatedOnlyLowStock(): void
     {
         $this->resetPage();
+    }
+
+    public function queueInventorySync(): void
+    {
+        abort_unless(auth()->user()?->can('trigger', SyncRun::class), 403);
+
+        Artisan::call('main-store:sync', [
+            'resource' => 'inventory',
+            '--queued' => true,
+        ]);
+
+        $this->syncQueued = true;
     }
 
     #[Computed]
@@ -55,6 +72,17 @@ new class extends Component {
 <section class="w-full">
     <x-pages::admin.layout :heading="__('Inventory')" :subheading="__('Monitor variant stock levels synced from the main store')">
         <div class="space-y-4">
+            @if ($syncQueued)
+                <flux:callout icon="check-circle" variant="success" heading="{{ __('Inventory sync queued successfully') }}" />
+            @endif
+
+            <div class="flex items-center justify-end">
+                <flux:button variant="primary" wire:click="queueInventorySync" wire:loading.attr="disabled">
+                    <span wire:loading.remove wire:target="queueInventorySync">{{ __('Queue Inventory Sync') }}</span>
+                    <span wire:loading wire:target="queueInventorySync">{{ __('Queuing...') }}</span>
+                </flux:button>
+            </div>
+
             <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                 <flux:input wire:model.live.debounce.300ms="search" :label="__('Search SKU / Product')" placeholder="{{ __('Type SKU, code, or product name...') }}" />
 

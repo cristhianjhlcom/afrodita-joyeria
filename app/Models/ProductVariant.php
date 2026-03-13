@@ -26,6 +26,12 @@ class ProductVariant extends Model
         'color',
         'hex',
         'size',
+        'include_in_merchant',
+        'gtin',
+        'mpn',
+        'google_product_category',
+        'sale_price_starts_at',
+        'sale_price_ends_at',
         'stock_on_hand',
         'stock_reserved',
         'stock_available',
@@ -48,6 +54,9 @@ class ProductVariant extends Model
             'stock_reserved' => 'integer',
             'stock_available' => 'integer',
             'is_active' => 'boolean',
+            'include_in_merchant' => 'boolean',
+            'sale_price_starts_at' => 'datetime',
+            'sale_price_ends_at' => 'datetime',
             'remote_updated_at' => 'datetime',
         ];
     }

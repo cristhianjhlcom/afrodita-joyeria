@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\PushOrderToMainStoreJob;
 use App\Models\Country;
 use App\Models\Department;
 use App\Models\District;
@@ -9,6 +10,7 @@ use App\Models\ProductVariant;
 use App\Models\Province;
 use App\Models\User;
 use App\Services\Storefront\CartService;
+use App\Services\Storefront\CheckoutService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -61,6 +63,8 @@ beforeEach(function () {
     config()->set('services.culqi.public_key', 'pk_test_123');
     config()->set('services.culqi.secret_key', 'sk_test_123');
     config()->set('services.culqi.base_url', 'https://api.culqi.test/v2');
+    config()->set('services.main_store.base_url', 'https://api.main-store.test');
+    config()->set('services.main_store.token', 'main_store_token');
 });
 
 it('renders checkout page', function () {
@@ -82,7 +86,7 @@ it('detects existing email and displays warning state', function () {
         ->assertSet('existingEmailDetected', true);
 });
 
-it('creates pending order and confirms payment successfully', function () {
+it('creates order after payment and pushes to main store', function () {
     seedCheckoutCart();
     [$country, $department, $province, $district] = createAddressHierarchy();
 
@@ -93,6 +97,13 @@ it('creates pending order and confirms payment successfully', function () {
                 'type' => 'venta_exitosa',
                 'code' => 'AUT0000',
                 'user_message' => 'Approved',
+            ],
+        ], 201),
+        'https://api.main-store.test/api/v1/orders' => Http::response([
+            'data' => [
+                'id' => 901,
+                'status' => 'paid',
+                'currency' => 'PEN',
             ],
         ], 201),
     ]);
@@ -113,16 +124,24 @@ it('creates pending order and confirms payment successfully', function () {
         ->call('startPayment')
         ->assertDispatched('checkout-open-culqi');
 
-    $order = Order::query()->where('payment_status', 'pending')->latest('id')->firstOrFail();
+    $sessions = session(CheckoutService::SESSION_KEY, []);
+    $orderToken = array_key_first($sessions);
+
+    expect($orderToken)->not->toBeNull();
+    expect(Order::query()->count())->toBe(0);
 
     $component
-        ->call('confirmPayment', (string) $order->order_token, 'tok_test_001')
-        ->assertRedirect(route('storefront.checkout.thank-you', ['orderToken' => $order->order_token]));
+        ->call('confirmPayment', (string) $orderToken, 'tok_test_001')
+        ->assertRedirect(route('storefront.checkout.thank-you', ['orderToken' => $orderToken]));
+
+    $order = Order::query()->where('order_token', $orderToken)->firstOrFail();
 
     $order->refresh();
 
     expect($order->payment_status)->toBe('paid');
     expect($order->status)->toBe('paid');
+    expect($order->push_status)->toBe('pushed');
+    expect($order->main_store_order_id)->toBe(901);
     expect($order->customer_document_type)->toBe('DNI');
     expect($order->customer_document_number)->toBe('12345678');
     expect($order->customer_phone)->toBe('999111222');
@@ -130,10 +149,60 @@ it('creates pending order and confirms payment successfully', function () {
     expect($order->shipping_total)->toBe(0);
     expect(session(CartService::SESSION_KEY, []))->toBe([]);
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
 });
 
-it('marks order as failed when culqi charge is declined and keeps cart', function () {
+it('queues retry when main store push fails', function () {
+    Bus::fake();
+    seedCheckoutCart();
+    [$country, $department, $province, $district] = createAddressHierarchy();
+
+    Http::fake([
+        'https://api.culqi.test/v2/charges' => Http::response([
+            'id' => 'chr_test_333',
+            'outcome' => [
+                'type' => 'venta_exitosa',
+                'code' => 'AUT0000',
+                'user_message' => 'Approved',
+            ],
+        ], 201),
+        'https://api.main-store.test/api/v1/orders' => Http::response([
+            'error' => [
+                'code' => 'order_failed',
+                'message' => 'Main store unavailable',
+            ],
+        ], 500),
+    ]);
+
+    $component = Livewire::test('pages::storefront.checkout')
+        ->set('firstName', 'Ana')
+        ->set('lastName', 'Perez')
+        ->set('customerEmail', 'ana@example.com')
+        ->set('customerPhone', '999 111 222')
+        ->set('documentType', 'DNI')
+        ->set('documentNumber', '12345678')
+        ->set('shippingCountryId', (string) $country->id)
+        ->set('shippingDepartmentId', (string) $department->id)
+        ->set('shippingProvinceId', (string) $province->id)
+        ->set('shippingDistrictId', (string) $district->id)
+        ->set('shippingAddressLine', 'Av. Primavera 123')
+        ->call('startPayment');
+
+    $sessions = session(CheckoutService::SESSION_KEY, []);
+    $orderToken = array_key_first($sessions);
+
+    $component->call('confirmPayment', (string) $orderToken, 'tok_test_333');
+
+    $order = Order::query()->where('order_token', $orderToken)->firstOrFail();
+
+    expect($order->push_status)->toBe('failed');
+
+    Bus::assertDispatched(PushOrderToMainStoreJob::class, function (PushOrderToMainStoreJob $job) use ($order): bool {
+        return $job->orderId === $order->id;
+    });
+});
+
+it('keeps cart when culqi charge is declined', function () {
     seedCheckoutCart();
     [$country, $department, $province, $district] = createAddressHierarchy();
 
@@ -158,17 +227,17 @@ it('marks order as failed when culqi charge is declined and keeps cart', functio
         ->set('shippingAddressLine', 'Av. Primavera 123')
         ->call('startPayment');
 
-    $order = Order::query()->where('payment_status', 'pending')->latest('id')->firstOrFail();
+    $sessions = session(CheckoutService::SESSION_KEY, []);
+    $orderToken = array_key_first($sessions);
+
+    expect($orderToken)->not->toBeNull();
 
     $component
-        ->call('confirmPayment', (string) $order->order_token, 'tok_test_999')
+        ->call('confirmPayment', (string) $orderToken, 'tok_test_999')
         ->assertSet('feedbackSuccess', false)
         ->assertSet('feedbackMessage', 'Payment declined');
 
-    $order->refresh();
-
-    expect($order->payment_status)->toBe('failed');
-    expect($order->status)->toBe('failed');
+    expect(Order::query()->count())->toBe(0);
     expect(session(CartService::SESSION_KEY, []))->not->toBe([]);
 });
 
@@ -181,6 +250,7 @@ it('shows fallback message when culqi responds with 3ds or iins errors', functio
             'merchant_message' => 'IINS',
             'user_message' => 'dont use 3DS authentication',
         ], 400),
+        'https://api.main-store.test/api/v1/orders' => Http::response([], 500),
     ]);
 
     $component = Livewire::test('pages::storefront.checkout')
@@ -197,10 +267,13 @@ it('shows fallback message when culqi responds with 3ds or iins errors', functio
         ->set('shippingAddressLine', 'Av. Primavera 123')
         ->call('startPayment');
 
-    $order = Order::query()->where('payment_status', 'pending')->latest('id')->firstOrFail();
+    $sessions = session(CheckoutService::SESSION_KEY, []);
+    $orderToken = array_key_first($sessions);
+
+    expect($orderToken)->not->toBeNull();
 
     $component
-        ->call('confirmPayment', (string) $order->order_token, 'tok_test_3ds')
+        ->call('confirmPayment', (string) $orderToken, 'tok_test_3ds')
         ->assertSet('feedbackSuccess', false)
         ->assertSet('feedbackMessage', 'Esta tarjeta no es compatible con este checkout. Prueba otra tarjeta o paga con Yape.');
 });
@@ -242,6 +315,11 @@ it('applies express shipping as double base amount when express is enabled', fun
                 'user_message' => 'Approved',
             ],
         ], 201),
+        'https://api.main-store.test/api/v1/orders' => Http::response([
+            'data' => [
+                'id' => 902,
+            ],
+        ], 201),
     ]);
 
     $component = Livewire::test('pages::storefront.checkout')
@@ -259,9 +337,14 @@ it('applies express shipping as double base amount when express is enabled', fun
         ->set('shippingAddressLine', 'Av. Primavera 123')
         ->call('startPayment');
 
-    $order = Order::query()->where('payment_status', 'pending')->latest('id')->firstOrFail();
+    $sessions = session(CheckoutService::SESSION_KEY, []);
+    $orderToken = array_key_first($sessions);
 
-    $component->call('confirmPayment', (string) $order->order_token, 'tok_test_202');
+    expect($orderToken)->not->toBeNull();
+
+    $component->call('confirmPayment', (string) $orderToken, 'tok_test_202');
+
+    $order = Order::query()->where('order_token', $orderToken)->firstOrFail();
 
     $order->refresh();
 

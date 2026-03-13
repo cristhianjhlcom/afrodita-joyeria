@@ -33,10 +33,18 @@
             <section class="space-y-3">
                 <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-white">{{ __('Legal') }}</h2>
                 <ul class="space-y-2 text-sm text-slate-300">
-                    <li>{{ __('Términos y condiciones') }}</li>
-                    <li>{{ __('Política de privacidad') }}</li>
-                    <li>{{ __('Política de cookies') }}</li>
-                    <li>{{ __('Libro de reclamaciones') }}</li>
+                    <li>
+                        <a href="{{ route('policies.terms') }}" class="transition hover:text-amber-300" wire:navigate>{{ __('Terminos y condiciones') }}</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('policies.privacy') }}" class="transition hover:text-amber-300" wire:navigate>{{ __('Politica de privacidad') }}</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('policies.returns') }}" class="transition hover:text-amber-300" wire:navigate>{{ __('Politica de devoluciones') }}</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('policies.shipping') }}" class="transition hover:text-amber-300" wire:navigate>{{ __('Politica de envios') }}</a>
+                    </li>
                 </ul>
             </section>
         </div>

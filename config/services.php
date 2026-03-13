@@ -51,6 +51,7 @@ return [
             'variant-images' => ['variant-images'],
             'inventory' => ['stocks', 'inventory'],
             'orders' => ['orders'],
+            'order-items' => ['order-items'],
             'countries' => ['countries'],
             'departments' => ['departments'],
             'provinces' => ['provinces'],

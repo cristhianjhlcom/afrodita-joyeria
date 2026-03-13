@@ -23,6 +23,7 @@ class Province extends Model
         'name',
         'ubigeo_code',
         'shipping_price',
+        'cost',
         'is_active',
         'remote_updated_at',
     ];
@@ -37,6 +38,7 @@ class Province extends Model
             'country_id' => 'integer',
             'department_id' => 'integer',
             'shipping_price' => 'integer',
+            'cost' => 'integer',
             'is_active' => 'boolean',
             'remote_updated_at' => 'datetime',
         ];

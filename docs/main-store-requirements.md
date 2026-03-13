@@ -272,16 +272,16 @@ Expected status handling:
 
 ## 12. Acceptance Checklist
 The main platform is ready when all are true:
-- [ ] All required `/api/v1/sync/*` endpoints exist.
-- [ ] Sanctum token auth with required abilities works.
-- [ ] `updated_since` incremental sync works on all resources.
-- [ ] Cursor pagination and deterministic ordering are implemented.
-- [ ] Products contract includes all fields and statuses from provided schema.
-- [ ] Variants contract includes all fields from provided schema.
-- [ ] Inventory endpoint is available and linked by `variant_id`.
-- [ ] Orders and order-items read-only mirror endpoints are available.
-- [ ] Standard error response shape is implemented.
-- [ ] Endpoint docs/examples are published for integration.
+- [x] All required `/api/v1/sync/*` endpoints exist.
+- [x] Sanctum token auth with required abilities works.
+- [x] `updated_since` incremental sync works on all resources.
+- [x] Cursor pagination and deterministic ordering are implemented.
+- [x] Products contract includes all fields and statuses from provided schema.
+- [x] Variants contract includes all fields from provided schema.
+- [x] Inventory endpoint is available and linked by `variant_id`.
+- [x] Orders and order-items read-only mirror endpoints are available.
+- [x] Standard error response shape is implemented.
+- [x] Endpoint docs/examples are published for integration.
 
 ## 13. Notes About Current Scope
 - This project starts with admin-first modules.

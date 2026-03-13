@@ -26,6 +26,11 @@ it('creates an external order through artisan command and stores local tracking'
 
     $payload = [
         'external_order_id' => 'remote-1001',
+        'currency' => 'USD',
+        'discount_amount' => 0,
+        'shipping_cost' => 0,
+        'order_status' => 'pending',
+        'payment_status' => 'unpaid',
         'customer' => [
             'email' => 'buyer@example.com',
             'first_name' => 'Ana',
@@ -68,6 +73,11 @@ it('is idempotent locally when same external_order_id is sent twice', function (
 
     $payload = [
         'external_order_id' => 'remote-1001',
+        'currency' => 'USD',
+        'discount_amount' => 0,
+        'shipping_cost' => 0,
+        'order_status' => 'pending',
+        'payment_status' => 'unpaid',
         'customer' => [
             'email' => 'buyer@example.com',
             'first_name' => 'Ana',

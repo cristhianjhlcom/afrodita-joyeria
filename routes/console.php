@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('main-store:sync --queued')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('main-store:orders:retry')->everyFiveMinutes()->withoutOverlapping();

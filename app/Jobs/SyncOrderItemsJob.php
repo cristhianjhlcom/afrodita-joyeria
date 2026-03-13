@@ -6,7 +6,7 @@ use App\Services\MainStore\MainStoreSyncService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-class SyncInventoryJob implements ShouldQueue
+class SyncOrderItemsJob implements ShouldQueue
 {
     use Queueable;
 
@@ -16,6 +16,6 @@ class SyncInventoryJob implements ShouldQueue
 
     public function handle(MainStoreSyncService $syncService): void
     {
-        $syncService->syncInventory(forceFull: $this->forceFull);
+        $syncService->syncOrderItems(forceFull: $this->forceFull);
     }
 }

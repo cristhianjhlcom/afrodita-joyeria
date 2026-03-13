@@ -12,8 +12,10 @@ class SyncCountriesJob implements ShouldQueue
 
     public int $timeout = 120;
 
+    public function __construct(public bool $forceFull = false) {}
+
     public function handle(MainStoreSyncService $syncService): void
     {
-        $syncService->syncCountries();
+        $syncService->syncCountries(forceFull: $this->forceFull);
     }
 }
