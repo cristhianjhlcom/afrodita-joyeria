@@ -31,6 +31,12 @@ return new class extends Migration
                 $table->dropForeign(['subcategory_id']);
             });
 
+            DB::table('products as p')
+                ->leftJoin('subcategories as s', 'p.subcategory_id', '=', 's.id')
+                ->whereNotNull('p.subcategory_id')
+                ->whereNull('s.id')
+                ->update(['p.subcategory_id' => null]);
+
             Schema::table('products', function (Blueprint $table): void {
                 $table->foreign('subcategory_id')
                     ->references('id')
