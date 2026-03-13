@@ -102,26 +102,121 @@
 
     <div class="border-t border-slate-700 bg-slate-800 text-slate-100">
         <nav class="mx-auto w-full max-w-screen-2xl px-3 sm:px-4" aria-label="{{ __('Category navigation') }}">
-            <div class="flex items-center gap-1 overflow-x-auto py-2 whitespace-nowrap">
-                <a
-                    href="{{ route('home') }}"
-                    class="inline-flex min-h-9 items-center rounded-sm px-3 text-sm font-medium transition hover:bg-slate-700 hover:text-amber-300"
-                    wire:navigate
-                >
-                    {{ __('Todo') }}
-                </a>
+            <div class="flex items-center justify-between gap-2 py-2">
+                <div class="flex items-center gap-2 md:hidden">
+                    <flux:modal.trigger name="storefront-categories">
+                        <button
+                            type="button"
+                            class="inline-flex min-h-9 items-center gap-2 rounded-sm border border-slate-600 bg-slate-800 px-3 text-sm font-semibold uppercase tracking-wide text-slate-100 transition hover:border-amber-400 hover:text-amber-300"
+                            x-data
+                            x-on:click.prevent="$dispatch('open-modal', 'storefront-categories')"
+                        >
+                            <flux:icon.bars-3 class="size-4" />
+                            <span>{{ __('Categorias') }}</span>
+                        </button>
+                    </flux:modal.trigger>
+                </div>
 
-                @foreach ($categories as $category)
+                <div class="hidden items-center gap-1 overflow-x-auto whitespace-nowrap md:flex">
                     <a
-                        href="{{ route('home', ['cats' => [$category->id]]) }}"
+                        href="{{ route('home') }}"
                         class="inline-flex min-h-9 items-center rounded-sm px-3 text-sm font-medium transition hover:bg-slate-700 hover:text-amber-300"
-                        wire:key="header-category-{{ $category->id }}"
                         wire:navigate
                     >
-                        {{ $category->name }}
+                        {{ __('Todo') }}
                     </a>
-                @endforeach
+
+                    @foreach ($categoryGroups as $group)
+                        @php($parent = $group['parent'])
+                        @php($children = $group['children'])
+                        @php($parentQueryKey = $group['is_top_level'] ? 'cats' : 'subs')
+
+                        @if ($children->isNotEmpty())
+                            <flux:dropdown position="bottom" align="start">
+                                <button
+                                    type="button"
+                                    class="inline-flex min-h-9 items-center gap-1 rounded-sm px-3 text-sm font-medium transition hover:bg-slate-700 hover:text-amber-300"
+                                >
+                                    <span>{{ $parent->name }}</span>
+                                    <flux:icon.chevron-down class="size-3.5" />
+                                </button>
+                                <flux:menu class="min-w-60">
+                                    <flux:menu.item :href="route('home', [$parentQueryKey => [$parent->id]])" wire:navigate>
+                                        {{ __('Todo') }} {{ $parent->name }}
+                                    </flux:menu.item>
+                                    <flux:menu.separator />
+                                    @foreach ($children as $child)
+                                        <flux:menu.item :href="route('home', ['subs' => [$child->id]])" wire:navigate>
+                                            {{ $child->name }}
+                                        </flux:menu.item>
+                                    @endforeach
+                                </flux:menu>
+                            </flux:dropdown>
+                        @else
+                            <a
+                                href="{{ route('home', [$parentQueryKey => [$parent->id]]) }}"
+                                class="inline-flex min-h-9 items-center rounded-sm px-3 text-sm font-medium transition hover:bg-slate-700 hover:text-amber-300"
+                                wire:key="header-category-{{ $parent->id }}"
+                                wire:navigate
+                            >
+                                {{ $parent->name }}
+                            </a>
+                        @endif
+                    @endforeach
+                </div>
             </div>
+
+            <flux:modal name="storefront-categories" variant="flyout" position="left" class="w-full max-w-sm">
+                <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-slate-900 dark:border-slate-700 dark:text-slate-100">
+                    <flux:heading size="lg">{{ __('Categorias') }}</flux:heading>
+                </div>
+
+                <div class="space-y-4 px-4 py-5 text-slate-900 dark:text-slate-100">
+                    <flux:modal.close>
+                        <a
+                            href="{{ route('home') }}"
+                            class="inline-flex w-full items-center rounded-sm px-2 py-1.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                            wire:navigate
+                        >
+                            {{ __('Todo') }}
+                        </a>
+                    </flux:modal.close>
+
+                    @foreach ($categoryGroups as $group)
+                        @php($parent = $group['parent'])
+                        @php($children = $group['children'])
+                        @php($parentQueryKey = $group['is_top_level'] ? 'cats' : 'subs')
+
+                        <div class="space-y-2">
+                            <flux:modal.close>
+                                <a
+                                    href="{{ route('home', [$parentQueryKey => [$parent->id]]) }}"
+                                    class="inline-flex w-full items-center rounded-sm px-2 py-1.5 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    wire:navigate
+                                >
+                                    {{ $parent->name }}
+                                </a>
+                            </flux:modal.close>
+
+                            @if ($children->isNotEmpty())
+                                <div class="space-y-1 ps-4">
+                                    @foreach ($children as $child)
+                                        <flux:modal.close>
+                                            <a
+                                                href="{{ route('home', ['subs' => [$child->id]]) }}"
+                                                class="inline-flex w-full items-center rounded-sm px-2 py-1.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                                                wire:navigate
+                                            >
+                                                {{ $child->name }}
+                                            </a>
+                                        </flux:modal.close>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </flux:modal>
         </nav>
     </div>
 </header>

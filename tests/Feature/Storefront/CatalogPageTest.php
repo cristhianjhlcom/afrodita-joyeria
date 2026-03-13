@@ -282,6 +282,8 @@ it('renders shared storefront header navigation and footer on catalog route', fu
 
     $subcategory = Category::factory()->create([
         'parent_id' => $parentCategory->id,
+        'name' => 'Anillos de Compromiso',
+        'slug' => 'anillos-de-compromiso',
     ]);
 
     $product = Product::factory()->create([
@@ -302,6 +304,7 @@ it('renders shared storefront header navigation and footer on catalog route', fu
         ->assertSee('Iniciar sesion')
         ->assertSee('Todo')
         ->assertSee('Anillos')
+        ->assertSee('Anillos de Compromiso')
         ->assertSee('Catalogo')
         ->assertSee('name="q"', false)
         ->assertSee('type="search"', false)
