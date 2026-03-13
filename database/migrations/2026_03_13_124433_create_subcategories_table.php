@@ -128,6 +128,11 @@ return new class extends Migration
                 }
             });
 
+        DB::table('products')
+            ->whereNotNull('subcategory_id')
+            ->whereNotIn('subcategory_id', DB::table('subcategories')->select('id'))
+            ->update(['subcategory_id' => null]);
+
         DB::table('categories')->whereNotNull('parent_id')->delete();
     }
 
