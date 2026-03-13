@@ -9,20 +9,22 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('subcategories', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('external_id')->unique();
-            $table->foreignId('category_id')->constrained('categories')->cascadeOnDelete();
-            $table->string('name');
-            $table->string('slug')->unique();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            $table->softDeletes();
+        if (! Schema::hasTable('subcategories')) {
+            Schema::create('subcategories', function (Blueprint $table): void {
+                $table->id();
+                $table->unsignedBigInteger('external_id')->unique();
+                $table->foreignId('category_id')->constrained('categories')->cascadeOnDelete();
+                $table->string('name');
+                $table->string('slug')->unique();
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+                $table->softDeletes();
 
-            $table->index(['category_id', 'name']);
-            $table->index('name');
-            $table->index('updated_at');
-        });
+                $table->index(['category_id', 'name']);
+                $table->index('name');
+                $table->index('updated_at');
+            });
+        }
 
         if (Schema::hasColumn('categories', 'parent_id')) {
             $this->migrateCategorySubcategories();
