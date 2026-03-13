@@ -91,4 +91,10 @@ class Product extends Model
     {
         return $this->hasMany(ProductImage::class);
     }
+
+    public function primaryImageUrl(): ?string
+    {
+        return app(\App\Services\Storefront\ProductImageService::class)
+            ->primaryImageUrl($this);
+    }
 }

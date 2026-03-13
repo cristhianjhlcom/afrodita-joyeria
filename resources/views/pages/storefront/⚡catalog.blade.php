@@ -12,7 +12,8 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
+new class extends Component
+{
     use WithPagination;
 
     #[Url(as: 'q')]
@@ -150,9 +151,10 @@ new class extends Component {
                 'subcategory:id,name,parent_id',
                 'images' => fn ($query) => $query
                     ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
-                    ->whereNull('variant_id')
+                    ->whereNull('deleted_at')
                     ->orderByDesc('is_primary')
-                    ->orderBy('sort_order'),
+                    ->orderBy('sort_order')
+                    ->orderBy('id'),
                 'variants' => fn ($query) => $query
                     ->select(['id', 'product_id', 'price', 'stock_available', 'is_active'])
                     ->whereNull('deleted_at')
@@ -195,12 +197,7 @@ new class extends Component {
 
     public function productCardImageUrl(Product $product): ?string
     {
-        $featuredImage = trim((string) ($product->featured_image ?? ''));
-        if ($featuredImage !== '') {
-            return $featuredImage;
-        }
-
-        return $product->images->first()?->url;
+        return $product->primaryImageUrl();
     }
 
     public function hasStock(Product $product): bool

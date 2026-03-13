@@ -61,7 +61,6 @@ new class extends Component
                 'subcategory:id,name,parent_id',
                 'images' => fn ($query) => $query
                     ->whereNull('deleted_at')
-                    ->whereNull('variant_id')
                     ->orderByDesc('is_primary')
                     ->orderBy('sort_order')
                     ->orderBy('id'),

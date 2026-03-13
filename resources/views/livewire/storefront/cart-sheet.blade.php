@@ -30,7 +30,7 @@
             <div class="max-h-[56vh] space-y-3 overflow-auto pr-1">
                 @forelse ($cartItems as $item)
                     @php($variant = $item['variant'])
-                    @php($imageUrl = $variant->primary_image_url ?: $variant->product?->featured_image)
+                    @php($imageUrl = $variant->primary_image_url ?: $variant->product?->primaryImageUrl())
                     <article
                         wire:key="cart-sheet-item-{{ $item['variant_id'] }}"
                         class="space-y-3 rounded-sm border border-slate-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"

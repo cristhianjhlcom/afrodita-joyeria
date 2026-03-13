@@ -89,7 +89,7 @@ new class extends Component
         <div class="space-y-3">
             @forelse ($this->cartItems as $item)
                 @php($variant = $item['variant'])
-                @php($imageUrl = $variant->primary_image_url ?: $variant->product?->featured_image)
+                @php($imageUrl = $variant->primary_image_url ?: $variant->product?->primaryImageUrl())
                 <article wire:key="cart-page-item-{{ $item['variant_id'] }}" class="space-y-3 rounded-sm border border-slate-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
                     <div class="flex gap-3">
                         <div class="size-20 shrink-0 overflow-hidden rounded-sm border border-slate-200 bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800">

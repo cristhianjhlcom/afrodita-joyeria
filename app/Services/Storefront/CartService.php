@@ -51,7 +51,14 @@ class CartService
             ->whereNull('deleted_at')
             ->where('is_active', true)
             ->with([
-                'product:id,name,slug,featured_image',
+                'product' => fn ($query) => $query
+                    ->select(['id', 'name', 'slug', 'featured_image'])
+                    ->with(['images' => fn ($imagesQuery) => $imagesQuery
+                        ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
+                        ->whereNull('deleted_at')
+                        ->orderByDesc('is_primary')
+                        ->orderBy('sort_order')
+                        ->orderBy('id')]),
             ])
             ->get([
                 'id',

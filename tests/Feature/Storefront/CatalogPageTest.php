@@ -207,7 +207,7 @@ it('falls back to all products when filters return no results', function () {
         ->assertSee('Open Catalog Necklace');
 });
 
-it('renders product card image from product images and not variant images', function () {
+it('renders product card image from primary product images', function () {
     $subcategory = Category::factory()->create();
 
     $product = Product::factory()->create([
@@ -234,16 +234,16 @@ it('renders product card image from product images and not variant images', func
         'product_id' => $product->id,
         'variant_id' => null,
         'url' => 'https://cdn.test/product-image.png',
-        'is_primary' => true,
+        'is_primary' => false,
     ]);
 
     $this->get(route('home'))
         ->assertSuccessful()
-        ->assertSee('https://cdn.test/product-image.png', false)
-        ->assertDontSee('https://cdn.test/variant-image.png', false);
+        ->assertSee('https://cdn.test/variant-image.png', false)
+        ->assertDontSee('https://cdn.test/product-image.png', false);
 });
 
-it('prioritizes featured image over synced product images in catalog cards', function () {
+it('prioritizes primary product image over featured image in catalog cards', function () {
     $subcategory = Category::factory()->create();
 
     $product = Product::factory()->create([
@@ -268,8 +268,8 @@ it('prioritizes featured image over synced product images in catalog cards', fun
 
     $this->get(route('home'))
         ->assertSuccessful()
-        ->assertSee('https://cdn.test/featured-image.png', false)
-        ->assertDontSee('https://cdn.test/fallback-product-image.png', false);
+        ->assertSee('https://cdn.test/fallback-product-image.png', false)
+        ->assertDontSee('https://cdn.test/featured-image.png', false);
 });
 
 it('renders shared storefront header navigation and footer on catalog route', function () {

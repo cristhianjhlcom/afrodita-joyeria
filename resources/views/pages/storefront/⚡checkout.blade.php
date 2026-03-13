@@ -732,7 +732,7 @@ new class extends Component
             <div class="max-h-[40vh] space-y-3 overflow-auto pr-1">
                 @forelse ($this->cartItems as $item)
                     @php($variant = $item['variant'])
-                    @php($imageUrl = $variant->primary_image_url ?: $variant->product?->featured_image)
+                    @php($imageUrl = $variant->primary_image_url ?: $variant->product?->primaryImageUrl())
                     <article wire:key="checkout-item-{{ $item['variant_id'] }}" class="space-y-2 rounded-sm border border-slate-200 p-3 dark:border-zinc-700">
                         <div class="flex gap-3">
                             <div class="size-16 shrink-0 overflow-hidden rounded-sm border border-slate-200 bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800">

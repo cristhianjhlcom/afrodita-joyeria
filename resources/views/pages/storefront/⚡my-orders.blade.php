@@ -51,14 +51,21 @@ new class extends Component
 
         $variants = ProductVariant::query()
             ->whereIn('external_id', $externalIds)
-            ->with(['product:id,name,featured_image'])
+            ->with(['product' => fn ($query) => $query
+                ->select(['id', 'name', 'featured_image'])
+                ->with(['images' => fn ($imagesQuery) => $imagesQuery
+                    ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
+                    ->whereNull('deleted_at')
+                    ->orderByDesc('is_primary')
+                    ->orderBy('sort_order')
+                    ->orderBy('id')])])
             ->get(['id', 'external_id', 'product_id', 'primary_image_url'])
             ->keyBy('external_id');
 
         return $orders->map(function (Order $order) use ($variants): array {
             $items = $order->items->map(function (OrderItem $item) use ($variants): array {
                 $variant = $item->variant_external_id ? $variants->get((int) $item->variant_external_id) : null;
-                $imageUrl = $variant?->primary_image_url ?: $variant?->product?->featured_image;
+                $imageUrl = $variant?->primary_image_url ?: $variant?->product?->primaryImageUrl();
 
                 return [
                     'item' => $item,
