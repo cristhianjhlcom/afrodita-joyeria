@@ -119,6 +119,27 @@ it('adds selected in-stock variant to the cart from product detail page', functi
     expect((int) session(CartService::SESSION_KEY.'.'.$variant->id))->toBe(1);
 });
 
+it('redirects to checkout when buying now', function () {
+    $product = Product::factory()->create([
+        'name' => 'Anillo Compra Rapida',
+        'slug' => 'anillo-compra-rapida',
+    ]);
+
+    $variant = ProductVariant::factory()->create([
+        'product_id' => $product->id,
+        'size' => 'M',
+        'color' => 'Negro',
+        'stock_available' => 2,
+        'is_active' => true,
+    ]);
+
+    Livewire::test('pages::storefront.product-detail', ['product' => $product])
+        ->call('buyNow')
+        ->assertRedirect(route('storefront.checkout.show'));
+
+    expect((int) session(CartService::SESSION_KEY.'.'.$variant->id))->toBe(1);
+});
+
 it('renders variant and product images together in carousel', function () {
     $product = Product::factory()->create([
         'name' => 'Anillo Carrusel',

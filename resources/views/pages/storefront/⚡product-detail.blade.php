@@ -305,6 +305,39 @@ new class extends Component
         );
     }
 
+    public function buyNow(): void
+    {
+        if (! $this->isAvailable || $this->selectedVariant === null) {
+            $this->cartFeedbackSuccess = false;
+            $this->cartFeedbackMessage = __('This variant is out of stock.');
+            $this->dispatch('toast-show',
+                duration: 3500,
+                slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+                dataset: ['variant' => 'warning']
+            );
+
+            return;
+        }
+
+        $result = app(CartService::class)->addVariant((int) $this->selectedVariant->id);
+
+        $this->cartFeedbackSuccess = (bool) $result['ok'];
+        $this->cartFeedbackMessage = (string) $result['message'];
+
+        if ($result['ok']) {
+            $this->dispatch('cart-updated');
+            $this->redirect(route('storefront.checkout.show'), navigate: true);
+
+            return;
+        }
+
+        $this->dispatch('toast-show',
+            duration: 3500,
+            slots: ['heading' => __('Cart'), 'text' => $this->cartFeedbackMessage],
+            dataset: ['variant' => 'warning']
+        );
+    }
+
     public function formatMinorAmount(?int $amount): string
     {
         if ($amount === null) {
@@ -575,6 +608,7 @@ new class extends Component
             <div class="grid gap-2 sm:grid-cols-2">
                 <button
                     type="button"
+                    wire:click="buyNow"
                     class="inline-flex min-h-11 items-center justify-center rounded-sm border border-amber-300 bg-amber-300 px-4 text-sm font-semibold text-slate-900 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
                     @disabled(! $this->isAvailable)
                     aria-disabled="{{ $this->isAvailable ? 'false' : 'true' }}"
