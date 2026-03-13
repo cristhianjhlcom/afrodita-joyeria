@@ -119,7 +119,7 @@ it('adds selected in-stock variant to the cart from product detail page', functi
     expect((int) session(CartService::SESSION_KEY.'.'.$variant->id))->toBe(1);
 });
 
-it('prioritizes selected variant images over generic product images in carousel', function () {
+it('renders variant and product images together in carousel', function () {
     $product = Product::factory()->create([
         'name' => 'Anillo Carrusel',
         'slug' => 'anillo-carrusel',
@@ -150,7 +150,7 @@ it('prioritizes selected variant images over generic product images in carousel'
     $this->get(route('storefront.products.show', $product))
         ->assertSuccessful()
         ->assertSee('https://cdn.test/variant-priority.jpg', false)
-        ->assertDontSee('https://cdn.test/product-generic.jpg', false);
+        ->assertSee('https://cdn.test/product-generic.jpg', false);
 });
 
 it('renders seo metadata and product schema on detail page', function () {

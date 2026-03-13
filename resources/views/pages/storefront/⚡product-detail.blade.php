@@ -143,20 +143,24 @@ new class extends Component
         $images = collect();
 
         if ($selectedVariant !== null && $selectedVariant->images->isNotEmpty()) {
-            $images = $selectedVariant->images->map(fn ($image): array => [
-                'url' => (string) $image->url,
-                'alt' => $this->imageAlt(
-                    (string) ($image->alt ?? ''),
-                    $selectedVariant
-                ),
-            ]);
+            $images = $images->merge(
+                $selectedVariant->images->map(fn ($image): array => [
+                    'url' => (string) $image->url,
+                    'alt' => $this->imageAlt(
+                        (string) ($image->alt ?? ''),
+                        $selectedVariant
+                    ),
+                ])
+            );
         }
 
-        if ($images->isEmpty()) {
-            $images = $this->productDetails->images->map(fn ($image): array => [
-                'url' => (string) $image->url,
-                'alt' => $this->imageAlt((string) ($image->alt ?? '')),
-            ]);
+        if ($this->productDetails->images->isNotEmpty()) {
+            $images = $images->merge(
+                $this->productDetails->images->map(fn ($image): array => [
+                    'url' => (string) $image->url,
+                    'alt' => $this->imageAlt((string) ($image->alt ?? '')),
+                ])
+            );
         }
 
         $featuredImage = trim((string) ($this->productDetails->featured_image ?? ''));
@@ -169,6 +173,7 @@ new class extends Component
 
         return $images
             ->filter(fn (array $image): bool => trim($image['url']) !== '')
+            ->unique('url')
             ->values();
     }
 
