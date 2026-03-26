@@ -391,3 +391,97 @@ it('returns out of stock feedback when catalog product has no available variants
 
     expect(session(CartService::SESSION_KEY, []))->toBe([]);
 });
+
+it('hides inactive and empty categories and subcategories from storefront navigation and filters', function () {
+    $visibleCategory = Category::factory()->create([
+        'name' => 'Emerald Rings',
+        'slug' => 'emerald-rings',
+    ]);
+
+    $visibleSubcategory = Subcategory::factory()->create([
+        'category_id' => $visibleCategory->id,
+        'name' => 'Modern Rings',
+        'slug' => 'modern-rings',
+    ]);
+
+    $visibleProduct = Product::factory()->create([
+        'name' => 'Signature Emerald',
+        'category_id' => $visibleCategory->id,
+        'subcategory_id' => $visibleSubcategory->id,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $visibleProduct->id,
+        'price' => 18500,
+        'is_active' => true,
+    ]);
+
+    $categoryWithInactiveSub = Category::factory()->create([
+        'name' => 'Direct Bracelets',
+        'slug' => 'direct-bracelets',
+    ]);
+
+    $inactiveSubcategory = Subcategory::factory()->inactive()->create([
+        'category_id' => $categoryWithInactiveSub->id,
+        'name' => 'Muted Bracelets',
+        'slug' => 'muted-bracelets',
+    ]);
+
+    $directProduct = Product::factory()->create([
+        'name' => 'Cuff Classic',
+        'category_id' => $categoryWithInactiveSub->id,
+        'subcategory_id' => $inactiveSubcategory->id,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $directProduct->id,
+        'price' => 12500,
+        'is_active' => true,
+    ]);
+
+    $emptyCategory = Category::factory()->create([
+        'name' => 'Empty Brooches',
+        'slug' => 'empty-brooches',
+    ]);
+
+    Subcategory::factory()->create([
+        'category_id' => $emptyCategory->id,
+        'name' => 'Silent Brooches',
+        'slug' => 'silent-brooches',
+    ]);
+
+    $inactiveCategory = Category::factory()->inactive()->create([
+        'name' => 'Muted Earrings',
+        'slug' => 'muted-earrings',
+    ]);
+
+    $inactiveSubcategory = Subcategory::factory()->create([
+        'category_id' => $inactiveCategory->id,
+        'name' => 'Muted Drops',
+        'slug' => 'muted-drops',
+    ]);
+
+    $inactiveProduct = Product::factory()->create([
+        'name' => 'Hidden Gem',
+        'category_id' => $inactiveCategory->id,
+        'subcategory_id' => $inactiveSubcategory->id,
+    ]);
+
+    ProductVariant::factory()->create([
+        'product_id' => $inactiveProduct->id,
+        'price' => 9900,
+        'is_active' => true,
+    ]);
+
+    $response = $this->get(route('home'))
+        ->assertSuccessful();
+
+    $response->assertSee('Emerald Rings');
+    $response->assertSee('Modern Rings');
+    $response->assertSee('Direct Bracelets');
+    $response->assertDontSee('Muted Bracelets');
+    $response->assertDontSee('Empty Brooches');
+    $response->assertDontSee('Silent Brooches');
+    $response->assertDontSee('Muted Earrings');
+    $response->assertDontSee('Muted Drops');
+});

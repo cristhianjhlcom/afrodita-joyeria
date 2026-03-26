@@ -1,4 +1,4 @@
 [mcp_servers.laravel-boost]
 command = "wsl.exe"
-args = ["/usr/bin/php8.4", "/home/cristhianjhl/code/afrodita-joyeria/artisan", "boost:mcp"]
-cwd = "/home/cristhianjhl/code/afrodita-joyeria"
+args = ["/usr/bin/php8.4", "/home/cristhianjhl/crissis16/code/afrodita-joyeria/artisan", "boost:mcp"]
+cwd = "/home/cristhianjhl/crissis16/code/afrodita-joyeria"

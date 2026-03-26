@@ -1,10 +1,9 @@
 <?php
 
-use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\Subcategory;
 use App\Services\Storefront\CartService;
+use App\Services\Storefront\CategoryTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -73,28 +72,7 @@ new class extends Component
     #[Computed]
     public function categoryGroups(): Collection
     {
-        $categories = Category::query()
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get(['id', 'name']);
-
-        $subcategories = Subcategory::query()
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get(['id', 'name', 'category_id']);
-
-        $childrenByParent = $subcategories->groupBy('category_id');
-
-        return $categories
-            ->map(function (Category $category) use ($childrenByParent): array {
-                return [
-                    'parent' => $category,
-                    'children' => $childrenByParent->get($category->id, collect())->values(),
-                ];
-            })
-            ->values();
+        return app(CategoryTree::class)->groups();
     }
 
     public function mount(): void
@@ -160,8 +138,9 @@ new class extends Component
         $baseQuery = Product::query()
             ->with([
                 'brand:id,name',
-                'category:id,name',
-                'subcategory:id,name,category_id',
+                'category:id,name,is_active',
+                'subcategory:id,name,category_id,is_active',
+                'subcategory.category:id,name,is_active',
                 'images' => fn ($query) => $query
                     ->select(['id', 'product_id', 'url', 'is_primary', 'sort_order'])
                     ->whereNull('deleted_at')
@@ -403,10 +382,12 @@ new class extends Component
 
                         <div class="space-y-2 p-4">
                             <h3 class="line-clamp-2 text-sm font-semibold leading-5 text-zinc-900 dark:text-zinc-100">{{ $product->name }}</h3>
+                            @php($category = $product->category?->is_active ? $product->category : null)
+                            @php($subcategory = ($product->subcategory?->is_active && $product->subcategory?->category?->is_active) ? $product->subcategory : null)
                             <p class="text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ $product->category?->name ?? __('Uncategorized') }}
-                                @if ($product->subcategory)
-                                    <span>• {{ $product->subcategory->name }}</span>
+                                {{ $category?->name ?? ($subcategory?->category?->is_active ? $subcategory->category->name : null) ?? __('Uncategorized') }}
+                                @if ($subcategory)
+                                    <span>• {{ $subcategory->name }}</span>
                                 @endif
                             </p>
 

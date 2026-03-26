@@ -8,7 +8,6 @@
         "junie"
     ],
     "guidelines": true,
-    "herd_mcp": false,
     "mcp": true,
     "nightwatch_mcp": false,
     "packages": [
@@ -16,10 +15,11 @@
     ],
     "sail": false,
     "skills": [
+        "laravel-best-practices",
         "fluxui-development",
         "livewire-development",
         "pest-testing",
         "tailwindcss-development",
-        "developing-with-fortify"
+        "fortify-development"
     ]
 }
